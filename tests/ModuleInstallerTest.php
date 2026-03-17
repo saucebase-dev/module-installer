@@ -33,6 +33,21 @@ final class TestableInstaller extends Installer
     {
         return parent::getBaseInstallationPath();
     }
+
+    public function callGetUpdateStrategy(): string
+    {
+        return parent::getUpdateStrategy();
+    }
+
+    public function callStashModuleDir(string $path): ?string
+    {
+        return parent::stashModuleDir($path);
+    }
+
+    public function callRestoreStash(string $from, string $to): void
+    {
+        parent::restoreStash($from, $to);
+    }
 }
 
 final class ModuleInstallerTest extends TestCase
@@ -118,5 +133,133 @@ final class ModuleInstallerTest extends TestCase
 
         $this->expectException(ModuleInstallerException::class);
         $installer->callGetModuleName($bad);
+    }
+
+    // -------------------------------------------------------------------------
+    // getUpdateStrategy
+    // -------------------------------------------------------------------------
+
+    public function test_get_update_strategy_returns_merge_by_default(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $installer = new TestableInstaller($io, null);
+
+        $this->assertSame('merge', $installer->callGetUpdateStrategy());
+    }
+
+    public function test_get_update_strategy_returns_overwrite_when_configured(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $composer = $this->createMock(Composer::class);
+
+        $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
+        $root->setExtra(['module-update-strategy' => 'overwrite']);
+        $composer->method('getPackage')->willReturn($root);
+
+        $installer = new TestableInstaller($io, $composer);
+
+        $this->assertSame('overwrite', $installer->callGetUpdateStrategy());
+    }
+
+    public function test_get_update_strategy_falls_back_on_invalid_value_and_warns(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $io->expects($this->once())->method('writeError');
+
+        $composer = $this->createMock(Composer::class);
+
+        $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
+        $root->setExtra(['module-update-strategy' => 'bogus']);
+        $composer->method('getPackage')->willReturn($root);
+
+        $installer = new TestableInstaller($io, $composer);
+
+        $this->assertSame('merge', $installer->callGetUpdateStrategy());
+    }
+
+    // -------------------------------------------------------------------------
+    // stashModuleDir
+    // -------------------------------------------------------------------------
+
+    public function test_stash_renames_dir_to_temp_location(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $installer = new TestableInstaller($io, null);
+
+        $source = sys_get_temp_dir().'/module-stash-test-src-'.uniqid('', true);
+        mkdir($source);
+        file_put_contents($source.'/custom.txt', 'hello');
+
+        $stash = $installer->callStashModuleDir($source);
+
+        $this->assertNotNull($stash);
+        $this->assertDirectoryDoesNotExist($source);
+        $this->assertDirectoryExists($stash);
+        $this->assertFileExists($stash.'/custom.txt');
+
+        // Cleanup
+        (new \Symfony\Component\Filesystem\Filesystem)->remove($stash);
+    }
+
+    public function test_stash_returns_null_when_dir_does_not_exist(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $installer = new TestableInstaller($io, null);
+
+        $this->assertNull($installer->callStashModuleDir('/nonexistent/path/'.uniqid('', true)));
+    }
+
+    // -------------------------------------------------------------------------
+    // restoreStash
+    // -------------------------------------------------------------------------
+
+    public function test_restore_stash_copies_user_files_into_install_path(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $installer = new TestableInstaller($io, null);
+
+        $stash = sys_get_temp_dir().'/module-stash-test-restore-'.uniqid('', true);
+        $install = sys_get_temp_dir().'/module-install-test-'.uniqid('', true);
+
+        mkdir($stash);
+        mkdir($install);
+        file_put_contents($stash.'/custom.txt', 'user edit');
+
+        $installer->callRestoreStash($stash, $install);
+
+        $this->assertFileExists($install.'/custom.txt');
+        $this->assertSame('user edit', file_get_contents($install.'/custom.txt'));
+
+        // Cleanup
+        $fs = new \Symfony\Component\Filesystem\Filesystem;
+        $fs->remove($stash);
+        $fs->remove($install);
+    }
+
+    public function test_restore_stash_leaves_new_upstream_files_intact(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $installer = new TestableInstaller($io, null);
+
+        $stash = sys_get_temp_dir().'/module-stash-test-upstream-'.uniqid('', true);
+        $install = sys_get_temp_dir().'/module-install-test-upstream-'.uniqid('', true);
+
+        mkdir($stash);
+        mkdir($install);
+
+        // Upstream added a new file during update
+        file_put_contents($install.'/new-upstream.txt', 'new from upstream');
+        // User had a customised file in the stash
+        file_put_contents($stash.'/custom.txt', 'user edit');
+
+        $installer->callRestoreStash($stash, $install);
+
+        $this->assertFileExists($install.'/new-upstream.txt');
+        $this->assertFileExists($install.'/custom.txt');
+
+        // Cleanup
+        $fs = new \Symfony\Component\Filesystem\Filesystem;
+        $fs->remove($stash);
+        $fs->remove($install);
     }
 }

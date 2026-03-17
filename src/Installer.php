@@ -4,9 +4,16 @@ namespace Saucebase\ModuleInstaller;
 
 use Composer\Installer\LibraryInstaller;
 use Composer\Package\PackageInterface;
+use Composer\Repository\InstalledRepositoryInterface;
 use Composer\Util\Filesystem;
+use React\Promise\PromiseInterface;
 use Saucebase\ModuleInstaller\Exceptions\ModuleInstallerException;
+use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 
+/**
+ * @property \Composer\PartialComposer $composer
+ * @property \Composer\IO\IOInterface  $io
+ */
 class Installer extends LibraryInstaller
 {
     const DEFAULT_ROOT = 'Modules';
@@ -14,6 +21,12 @@ class Installer extends LibraryInstaller
     const DEFAULT_MODULE_TYPE = 'laravel-module';
 
     const DEFAULT_EXCLUDED_DIRS = ['.github', '.git'];
+
+    const DEFAULT_UPDATE_STRATEGY = 'merge';
+
+    const UPDATE_STRATEGY_MERGE = 'merge';
+
+    const UPDATE_STRATEGY_OVERWRITE = 'overwrite';
 
     public function getInstallPath(PackageInterface $package)
     {
@@ -133,11 +146,83 @@ class Installer extends LibraryInstaller
     }
 
     /**
+     * Get the update strategy to use when updating a module.
+     * Defaults to 'merge' and can be overridden via extra['module-update-strategy'].
+     *
+     * @return string
+     */
+    protected function getUpdateStrategy(): string
+    {
+        if (! $this->composer || ! $this->composer->getPackage()) {
+            return self::DEFAULT_UPDATE_STRATEGY;
+        }
+
+        $extra = $this->composer->getPackage()->getExtra();
+
+        if (! $extra || empty($extra['module-update-strategy'])) {
+            return self::DEFAULT_UPDATE_STRATEGY;
+        }
+
+        $strategy = $extra['module-update-strategy'];
+        $allowed = [self::UPDATE_STRATEGY_MERGE, self::UPDATE_STRATEGY_OVERWRITE];
+
+        if (! in_array($strategy, $allowed, true)) {
+            $this->io->writeError(
+                sprintf(
+                    '  <warning>Invalid module-update-strategy "%s". Falling back to "%s".</warning>',
+                    $strategy,
+                    self::DEFAULT_UPDATE_STRATEGY
+                )
+            );
+
+            return self::DEFAULT_UPDATE_STRATEGY;
+        }
+
+        return $strategy;
+    }
+
+    /**
+     * Rename the module directory to a temp location and return the temp path.
+     * Returns null if the directory does not exist.
+     *
+     * @param  string  $path
+     * @return string|null
+     */
+    protected function stashModuleDir(string $path): ?string
+    {
+        if (! is_dir($path)) {
+            return null;
+        }
+
+        $stash = sys_get_temp_dir().'/module-stash-'.uniqid('', true);
+        (new SymfonyFilesystem)->rename($path, $stash);
+
+        return $stash;
+    }
+
+    /**
+     * Mirror the stash directory back into the install path so user edits win.
+     *
+     * @param  string  $stashPath
+     * @param  string  $installPath
+     * @return void
+     */
+    protected function restoreStash(string $stashPath, string $installPath): void
+    {
+        (new SymfonyFilesystem)->mirror(
+            $stashPath,
+            $installPath,
+            null,
+            ['override' => true, 'delete' => false]
+        );
+    }
+
+    /**
      * Override install to remove excluded directories after installation.
      *
      * {@inheritDoc}
      */
-    public function install(\Composer\Repository\InstalledRepositoryInterface $repo, PackageInterface $package)
+    public function install(InstalledRepositoryInterface $repo, PackageInterface $package): PromiseInterface|null
     {
         $promise = parent::install($repo, $package);
 
@@ -147,16 +232,34 @@ class Installer extends LibraryInstaller
     }
 
     /**
-     * Override update to remove excluded directories after update.
+     * Override update to preserve user customisations (merge strategy) or replace entirely (overwrite).
      *
      * {@inheritDoc}
      */
-    public function update(\Composer\Repository\InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target)
+    public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): PromiseInterface|null
     {
+        $stashPath = null;
+
+        if ($this->getUpdateStrategy() === self::UPDATE_STRATEGY_MERGE) {
+            $stashPath = $this->stashModuleDir($this->getInstallPath($initial));
+        }
+
         $promise = parent::update($repo, $initial, $target);
 
-        return $promise->then(function () use ($target) {
-            $this->removeExcludedDirectories($target);
-        });
+        return $promise->then(
+            function () use ($target, $stashPath) {
+                $this->removeExcludedDirectories($target);
+                if ($stashPath !== null) {
+                    $this->restoreStash($stashPath, $this->getInstallPath($target));
+                    (new Filesystem)->removeDirectory($stashPath);
+                }
+            },
+            function (\Throwable $e) use ($stashPath) {
+                if ($stashPath !== null) {
+                    (new Filesystem)->removeDirectory($stashPath);
+                }
+                throw $e;
+            }
+        );
     }
 }
