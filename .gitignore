@@ -3,3 +3,4 @@ composer.phar
 /.vscode
 .phpunit.result.cache
 /node_modules/
+.claude/

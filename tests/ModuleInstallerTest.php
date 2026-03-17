@@ -9,7 +9,7 @@ use Composer\IO\IOInterface;
 use Composer\Package\Package;
 use Composer\Package\PackageInterface;
 use Composer\Package\RootPackage;
-use PHPUnit\Framework\MockObject\MockObject;
+use Composer\PartialComposer;
 use PHPUnit\Framework\TestCase;
 use Saucebase\ModuleInstaller\Exceptions\ModuleInstallerException;
 use Saucebase\ModuleInstaller\Installer;
@@ -17,6 +17,9 @@ use Symfony\Component\Filesystem\Filesystem;
 
 /**
  * Shim that avoids LibraryInstaller's heavy constructor.
+ *
+ * @property PartialComposer $composer
+ * @property IOInterface $io
  */
 final class TestableInstaller extends Installer
 {
@@ -56,8 +59,8 @@ final class ModuleInstallerTest extends TestCase
 {
     public function test_supports_default_module_type(): void
     {
-        $io = $this->createMock(IOInterface::class);
-        $composer = $this->createMock(Composer::class);
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
 
         $installer = new TestableInstaller($io, $composer);
 
@@ -68,8 +71,8 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_supports_custom_module_type_from_extra(): void
     {
-        $io = $this->createMock(IOInterface::class);
-        $composer = $this->createMock(Composer::class);
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
 
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
         $root->setExtra(['module-type' => 'saucebase-module']);
@@ -84,7 +87,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_get_install_path_uses_default_modules_dir_when_no_composer(): void
     {
         // Composer is null -> should fall back to DEFAULT_ROOT ("Modules")
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
         $pkg = new Package('saucebase/something-nice', '1.0.0.0', '1.0.0');
@@ -94,8 +97,8 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_get_install_path_uses_default_when_no_module_dir_in_extra(): void
     {
-        $io = $this->createMock(IOInterface::class);
-        $composer = $this->createMock(Composer::class);
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
 
         // Root package present, but without extra['module-dir']
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
@@ -110,8 +113,8 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_get_install_path_honors_extra_module_dir(): void
     {
-        $io = $this->createMock(IOInterface::class);
-        $composer = $this->createMock(Composer::class);
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
 
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
         $root->setExtra(['module-dir' => 'CustomModules']); // custom dir
@@ -125,12 +128,11 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_get_module_name_throws_on_invalid_pretty_name(): void
     {
-        $io = $this->createMock(IOInterface::class);
-        $composer = $this->createMock(Composer::class);
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
         $installer = new TestableInstaller($io, $composer);
 
-        /** @var MockObject&PackageInterface $bad */
-        $bad = $this->createMock(PackageInterface::class);
+        $bad = $this->createStub(PackageInterface::class);
         $bad->method('getPrettyName')->willReturn('invalidname'); // no slash
 
         $this->expectException(ModuleInstallerException::class);
@@ -143,7 +145,7 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_get_update_strategy_returns_merge_by_default(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
         $this->assertSame('merge', $installer->callGetUpdateStrategy());
@@ -151,8 +153,8 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_get_update_strategy_returns_overwrite_when_configured(): void
     {
-        $io = $this->createMock(IOInterface::class);
-        $composer = $this->createMock(Composer::class);
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
 
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
         $root->setExtra(['module-update-strategy' => 'overwrite']);
@@ -168,7 +170,7 @@ final class ModuleInstallerTest extends TestCase
         $io = $this->createMock(IOInterface::class);
         $io->expects($this->once())->method('writeError');
 
-        $composer = $this->createMock(Composer::class);
+        $composer = $this->createStub(Composer::class);
 
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
         $root->setExtra(['module-update-strategy' => 'bogus']);
@@ -185,7 +187,7 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_stash_renames_dir_to_temp_location(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
         $source = sys_get_temp_dir().'/module-stash-test-src-'.uniqid('', true);
@@ -205,7 +207,7 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_stash_returns_null_when_dir_does_not_exist(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
         $this->assertNull($installer->callStashModuleDir('/nonexistent/path/'.uniqid('', true)));
@@ -217,7 +219,7 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_restore_stash_copies_user_files_into_install_path(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
         $stash = sys_get_temp_dir().'/module-stash-test-restore-'.uniqid('', true);
@@ -240,7 +242,7 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_restore_stash_leaves_new_upstream_files_intact(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
         $stash = sys_get_temp_dir().'/module-stash-test-upstream-'.uniqid('', true);
