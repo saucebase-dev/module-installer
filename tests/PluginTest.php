@@ -18,7 +18,7 @@ final class PluginTest extends TestCase
 {
     public function test_activate_adds_installer_to_installation_manager(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installationManager = $this->createMock(InstallationManager::class);
 
         $composer = $this->buildComposer($installationManager);
@@ -33,7 +33,7 @@ final class PluginTest extends TestCase
 
     public function test_deactivate_removes_installer_from_installation_manager(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installationManager = $this->createMock(InstallationManager::class);
 
         $composer = $this->buildComposer($installationManager);
@@ -48,7 +48,7 @@ final class PluginTest extends TestCase
 
     public function test_uninstall_removes_installer_from_installation_manager(): void
     {
-        $io = $this->createMock(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installationManager = $this->createMock(InstallationManager::class);
 
         $composer = $this->buildComposer($installationManager);
@@ -71,7 +71,7 @@ final class PluginTest extends TestCase
         $config = new Config(false, getcwd());
         $composer->setConfig($config);
 
-        $composer->setDownloadManager($this->createMock(DownloadManager::class));
+        $composer->setDownloadManager($this->createStub(DownloadManager::class));
         $composer->setInstallationManager($installationManager);
 
         $rootPackage = new RootPackage('test/app', '1.0.0.0', '1.0.0');
