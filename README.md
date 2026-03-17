@@ -2,10 +2,10 @@
 
 [![PHP Version](https://img.shields.io/badge/PHP-8.4%2B-777BB4?logo=php&logoColor=white)](#requirements)
 [![Composer](https://img.shields.io/badge/Composer-2.x-885630?logo=composer&logoColor=white)](#requirements)
-[![Tests](https://github.com/sauce-base/module-installer/actions/workflows/php.yml/badge.svg)](https://github.com/sauce-base/module-installer/actions/workflows/php.yml)
+[![Tests](https://github.com/saucebase-dev/module-installer/actions/workflows/php.yml/badge.svg)](https://github.com/saucebase-dev/module-installer/actions/workflows/php.yml)
 [![License](https://img.shields.io/badge/License-MIT-0A7EA4)](#license)
 
-This Composer plugin installs Sauce Base modules into the correct directory. It ships with `sauce-base/core`, so every module that your project requires is placed where Sauce Base can find and load it. The installer stays compatible with [nWidart/laravel-modules](https://github.com/nWidart/laravel-modules) and offers a Sauce Base-focused alternative to [joshbrw/laravel-module-installer](https://github.com/joshbrw/laravel-module-installer).
+This Composer plugin installs Sauce Base modules into the correct directory. It ships with `saucebase-dev/saucebase`, so every module that your project requires is placed where Sauce Base can find and load it. The installer stays compatible with [nWidart/laravel-modules](https://github.com/nWidart/laravel-modules) and offers a Sauce Base-focused alternative to [joshbrw/laravel-module-installer](https://github.com/joshbrw/laravel-module-installer).
 
 ## How It Works
 
@@ -18,11 +18,11 @@ This Composer plugin installs Sauce Base modules into the correct directory. It 
 
 - PHP 8.4 or newer
 - Composer 2.x
-- A project based on `sauce-base/core` (the core already requires this plugin)
+- A project based on `saucebase-dev/saucebase` (the core already requires this plugin)
 
 ## Installation
 
-`sauce-base/core` already requires this package. When you install the core, Composer pulls in the plugin and activates it through the `Saucebase\\ModuleInstaller\\Plugin` class, so a typical Sauce Base project needs no extra configuration.
+`saucebase-dev/saucebase` already requires this package. When you install the core, Composer pulls in the plugin and activates it through the `Saucebase\\ModuleInstaller\\Plugin` class, so a typical Sauce Base project needs no extra configuration.
 
 Need the installer for a different Composer project? Require it directly:
 
