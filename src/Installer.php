@@ -3,7 +3,9 @@
 namespace Saucebase\ModuleInstaller;
 
 use Composer\Installer\LibraryInstaller;
+use Composer\IO\IOInterface;
 use Composer\Package\PackageInterface;
+use Composer\PartialComposer;
 use Composer\Repository\InstalledRepositoryInterface;
 use Composer\Util\Filesystem;
 use React\Promise\PromiseInterface;
@@ -11,8 +13,8 @@ use Saucebase\ModuleInstaller\Exceptions\ModuleInstallerException;
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 
 /**
- * @property \Composer\PartialComposer $composer
- * @property \Composer\IO\IOInterface  $io
+ * @property PartialComposer $composer
+ * @property IOInterface $io
  */
 class Installer extends LibraryInstaller
 {
@@ -148,8 +150,6 @@ class Installer extends LibraryInstaller
     /**
      * Get the update strategy to use when updating a module.
      * Defaults to 'merge' and can be overridden via extra['module-update-strategy'].
-     *
-     * @return string
      */
     protected function getUpdateStrategy(): string
     {
@@ -184,9 +184,6 @@ class Installer extends LibraryInstaller
     /**
      * Rename the module directory to a temp location and return the temp path.
      * Returns null if the directory does not exist.
-     *
-     * @param  string  $path
-     * @return string|null
      */
     protected function stashModuleDir(string $path): ?string
     {
@@ -202,10 +199,6 @@ class Installer extends LibraryInstaller
 
     /**
      * Mirror the stash directory back into the install path so user edits win.
-     *
-     * @param  string  $stashPath
-     * @param  string  $installPath
-     * @return void
      */
     protected function restoreStash(string $stashPath, string $installPath): void
     {
@@ -222,7 +215,7 @@ class Installer extends LibraryInstaller
      *
      * {@inheritDoc}
      */
-    public function install(InstalledRepositoryInterface $repo, PackageInterface $package): PromiseInterface|null
+    public function install(InstalledRepositoryInterface $repo, PackageInterface $package): ?PromiseInterface
     {
         $promise = parent::install($repo, $package);
 
@@ -236,7 +229,7 @@ class Installer extends LibraryInstaller
      *
      * {@inheritDoc}
      */
-    public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): PromiseInterface|null
+    public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): ?PromiseInterface
     {
         $stashPath = null;
 

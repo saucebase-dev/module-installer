@@ -9,9 +9,11 @@ use Composer\IO\IOInterface;
 use Composer\Package\Package;
 use Composer\Package\PackageInterface;
 use Composer\Package\RootPackage;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Saucebase\ModuleInstaller\Exceptions\ModuleInstallerException;
 use Saucebase\ModuleInstaller\Installer;
+use Symfony\Component\Filesystem\Filesystem;
 
 /**
  * Shim that avoids LibraryInstaller's heavy constructor.
@@ -127,7 +129,7 @@ final class ModuleInstallerTest extends TestCase
         $composer = $this->createMock(Composer::class);
         $installer = new TestableInstaller($io, $composer);
 
-        /** @var \PHPUnit\Framework\MockObject\MockObject&PackageInterface $bad */
+        /** @var MockObject&PackageInterface $bad */
         $bad = $this->createMock(PackageInterface::class);
         $bad->method('getPrettyName')->willReturn('invalidname'); // no slash
 
@@ -198,7 +200,7 @@ final class ModuleInstallerTest extends TestCase
         $this->assertFileExists($stash.'/custom.txt');
 
         // Cleanup
-        (new \Symfony\Component\Filesystem\Filesystem)->remove($stash);
+        (new Filesystem)->remove($stash);
     }
 
     public function test_stash_returns_null_when_dir_does_not_exist(): void
@@ -231,7 +233,7 @@ final class ModuleInstallerTest extends TestCase
         $this->assertSame('user edit', file_get_contents($install.'/custom.txt'));
 
         // Cleanup
-        $fs = new \Symfony\Component\Filesystem\Filesystem;
+        $fs = new Filesystem;
         $fs->remove($stash);
         $fs->remove($install);
     }
@@ -258,7 +260,7 @@ final class ModuleInstallerTest extends TestCase
         $this->assertFileExists($install.'/custom.txt');
 
         // Cleanup
-        $fs = new \Symfony\Component\Filesystem\Filesystem;
+        $fs = new Filesystem;
         $fs->remove($stash);
         $fs->remove($install);
     }
