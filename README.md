@@ -58,6 +58,53 @@ By default, modules are installed under `Modules/` at the project root. You can 
 
 With the configuration above, a module published as `saucebase/example-module` installs to `MyModules/ExampleModule`.
 
+## Configuring Update Behaviour
+
+By default, when you run `composer update`, the installer **merges** the new package version into
+your existing module directory rather than replacing it. Your customised files are preserved; any
+new files shipped in the update are added on top.
+
+| Strategy | What happens on `composer update` |
+|---|---|
+| `merge` *(default)* | Existing module files are kept. New files from the package are added. Your edits always win. |
+| `overwrite` | The module directory is replaced entirely with the new package contents. All local changes are lost. |
+
+### Keeping your customisations (default)
+
+No configuration is needed. The `merge` strategy is active by default. Running `composer update`
+will add any new files the package ships without touching files you have already edited.
+
+> **Note:** Because your local files always take precedence, bug fixes or updates to files you have
+> customised will **not** be applied automatically. To pick up an upstream change to a specific
+> file, replace it manually or delete it and re-run `composer update`.
+
+### Full overwrite (CI / reproducible builds)
+
+If you want every `composer update` to produce an exact copy of the package — discarding any
+local edits — set the strategy to `overwrite` in your root `composer.json`:
+
+```json
+{
+    "extra": {
+        "module-update-strategy": "overwrite"
+    }
+}
+```
+
+This is recommended for CI pipelines and staging environments where reproducibility matters more
+than preserving local changes.
+
+### Getting a completely fresh copy of a module
+
+With the `merge` strategy (default), delete the module directory and run `composer update`:
+
+```bash
+rm -rf Modules/ExampleModule
+composer update vendor/example-module
+```
+
+The installer will perform a clean install into the now-empty path.
+
 ## Creating Sauce Base Modules
 
 To ship a module that works with this installer:
