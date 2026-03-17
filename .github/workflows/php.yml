@@ -17,7 +17,7 @@ jobs:
     name: PHP ${{ matrix.php-versions }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Setup PHP
       uses: shivammathur/setup-php@master
@@ -39,13 +39,14 @@ jobs:
       runs-on: ubuntu-latest
       steps:
           - uses: actions/checkout@v6
+            with:
+                ref: ${{ github.head_ref }}
           - name: "laravel-pint"
             uses: aglipanci/laravel-pint-action@latest
             with:
                 configPath: './pint.json'
 
           - name: Commit changes
-            uses: stefanzweifel/git-auto-commit-action@v4
+            uses: stefanzweifel/git-auto-commit-action@v7
             with:
                 commit_message: PHP Linting (Pint)
-                skip_fetch: true
