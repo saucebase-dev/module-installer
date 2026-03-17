@@ -11,6 +11,8 @@ use Composer\Util\Filesystem;
 use React\Promise\PromiseInterface;
 use Saucebase\ModuleInstaller\Exceptions\ModuleInstallerException;
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
+use Symfony\Component\Finder\Finder;
+use Symfony\Component\Process\Process;
 
 /**
  * @property PartialComposer $composer
@@ -198,16 +200,64 @@ class Installer extends LibraryInstaller
     }
 
     /**
-     * Mirror the stash directory back into the install path so user edits win.
+     * Download the given package version into $basePath using Composer's DownloadManager
+     * so the dist cache is reused. Returns a promise that resolves when ready.
      */
-    protected function restoreStash(string $stashPath, string $installPath): void
+    protected function downloadBase(PackageInterface $initial, string $basePath): PromiseInterface
     {
-        (new SymfonyFilesystem)->mirror(
-            $stashPath,
-            $installPath,
-            null,
-            ['override' => true, 'delete' => false]
-        );
+        $dm = $this->composer->getDownloadManager();
+
+        return $dm->download($initial, $basePath)
+                  ->then(fn () => $dm->install($initial, $basePath));
+    }
+
+    /**
+     * 3-way merge stash (user's copy) against base (original version) into install (new version).
+     *
+     * Decision table:
+     *   stash + base + install  → git merge-file (3-way merge)
+     *   stash + base, no install → upstream deleted the file — leave it gone
+     *   stash only (no base)    → user-added file — copy to install
+     *   install only            → upstream-added file — already there, no action needed
+     */
+    protected function mergeStash(string $stash, string $base, string $install): void
+    {
+        $finder = (new Finder)->files()->in($stash);
+
+        foreach ($finder as $file) {
+            $rel       = $file->getRelativePathname();
+            $stashFile = $stash   . '/' . $rel;
+            $baseFile  = $base    . '/' . $rel;
+            $newFile   = $install . '/' . $rel;
+
+            if (! file_exists($baseFile)) {
+                // User-added file (not in original dist) — always keep
+                (new SymfonyFilesystem)->copy($stashFile, $newFile, true);
+                continue;
+            }
+
+            if (! file_exists($newFile)) {
+                // Upstream deleted this file — respect the deletion, do not restore
+                continue;
+            }
+
+            // All three versions exist — 3-way merge
+            $merged = $stashFile . '.merge-work';
+            copy($stashFile, $merged);
+
+            $process = new Process(
+                ['git', 'merge-file', '-L', 'yours', '-L', 'original', '-L', 'upstream',
+                 $merged, $baseFile, $newFile]
+            );
+            $process->run();
+
+            // exit code >0 = conflict markers inserted, but result is still usable
+            if ($process->getExitCode() > 0) {
+                $this->io->writeError("  <warning>Merge conflict in $rel — conflict markers inserted</warning>");
+            }
+
+            rename($merged, $newFile);
+        }
     }
 
     /**
@@ -232,24 +282,35 @@ class Installer extends LibraryInstaller
     public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): ?PromiseInterface
     {
         $stashPath = null;
+        $basePath  = null;
 
         if ($this->getUpdateStrategy() === self::UPDATE_STRATEGY_MERGE) {
             $stashPath = $this->stashModuleDir($this->getInstallPath($initial));
+            if ($stashPath !== null) {
+                $basePath = sys_get_temp_dir() . '/module-base-' . uniqid('', true);
+            }
         }
 
-        $promise = parent::update($repo, $initial, $target);
+        $prepareBase = ($basePath !== null)
+            ? $this->downloadBase($initial, $basePath)
+            : \React\Promise\resolve(null);
 
-        return $promise->then(
-            function () use ($target, $stashPath) {
+        return $prepareBase->then(fn () => parent::update($repo, $initial, $target))->then(
+            function () use ($target, $stashPath, $basePath) {
                 $this->removeExcludedDirectories($target);
                 if ($stashPath !== null) {
-                    $this->restoreStash($stashPath, $this->getInstallPath($target));
+                    $installPath = $this->getInstallPath($target);
+                    $this->mergeStash($stashPath, $basePath, $installPath);
                     (new Filesystem)->removeDirectory($stashPath);
+                    (new Filesystem)->removeDirectory($basePath);
                 }
             },
-            function (\Throwable $e) use ($stashPath) {
+            function (\Throwable $e) use ($stashPath, $basePath) {
                 if ($stashPath !== null) {
                     (new Filesystem)->removeDirectory($stashPath);
+                }
+                if ($basePath !== null) {
+                    (new Filesystem)->removeDirectory($basePath);
                 }
                 throw $e;
             }
