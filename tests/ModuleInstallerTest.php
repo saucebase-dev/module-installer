@@ -9,6 +9,7 @@ use Composer\IO\IOInterface;
 use Composer\Package\Package;
 use Composer\Package\PackageInterface;
 use Composer\Package\RootPackage;
+use Composer\PartialComposer;
 use PHPUnit\Framework\TestCase;
 use Saucebase\ModuleInstaller\Exceptions\ModuleInstallerException;
 use Saucebase\ModuleInstaller\Installer;
@@ -17,8 +18,8 @@ use Symfony\Component\Filesystem\Filesystem;
 /**
  * Shim that avoids LibraryInstaller's heavy constructor.
  *
- * @property \Composer\PartialComposer $composer
- * @property \Composer\IO\IOInterface  $io
+ * @property PartialComposer $composer
+ * @property IOInterface $io
  */
 final class TestableInstaller extends Installer
 {
