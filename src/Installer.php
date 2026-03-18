@@ -256,7 +256,7 @@ class Installer extends LibraryInstaller
                 $this->io->writeError("  <warning>Merge conflict in $rel — conflict markers inserted</warning>");
             }
 
-            rename($merged, $newFile);
+            (new SymfonyFilesystem)->rename($merged, $newFile, true);
         }
     }
 
