@@ -53,6 +53,11 @@ final class TestableInstaller extends Installer
     {
         parent::mergeStash($stash, $base, $install);
     }
+
+    public function callRestoreStash(string $stashPath, PackageInterface $package): void
+    {
+        parent::restoreStash($stashPath, $package);
+    }
 }
 
 final class ModuleInstallerTest extends TestCase
@@ -378,5 +383,71 @@ final class ModuleInstallerTest extends TestCase
         $fs->remove($stash);
         $fs->remove($base);
         $fs->remove($install);
+    }
+
+    // -------------------------------------------------------------------------
+    // restoreStash
+    // -------------------------------------------------------------------------
+
+    public function test_restore_stash_renames_stash_back_when_original_path_missing(): void
+    {
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
+
+        $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
+        $root->setExtra(['module-dir' => sys_get_temp_dir()]);
+        $composer->method('getPackage')->willReturn($root);
+
+        $installer = new TestableInstaller($io, $composer);
+
+        $stash = sys_get_temp_dir().'/module-stash-restore-test-'.uniqid('', true);
+        mkdir($stash);
+        file_put_contents($stash.'/custom.php', '<?php // user file');
+
+        $pkg = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+
+        // The original install path does not exist (was cleared during update)
+        $originalPath = $installer->getInstallPath($pkg);
+        $this->assertDirectoryDoesNotExist($originalPath);
+
+        $installer->callRestoreStash($stash, $pkg);
+
+        $this->assertDirectoryDoesNotExist($stash);
+        $this->assertDirectoryExists($originalPath);
+        $this->assertFileExists($originalPath.'/custom.php');
+
+        (new Filesystem)->remove($originalPath);
+    }
+
+    public function test_restore_stash_discards_stash_when_original_path_already_exists(): void
+    {
+        $io = $this->createStub(IOInterface::class);
+        $composer = $this->createStub(Composer::class);
+
+        $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
+        $root->setExtra(['module-dir' => sys_get_temp_dir()]);
+        $composer->method('getPackage')->willReturn($root);
+
+        $installer = new TestableInstaller($io, $composer);
+
+        $pkg = new Package('saucebase/already-there', '1.0.0.0', '1.0.0');
+
+        // Pre-create the original path (partial update left it behind)
+        $originalPath = $installer->getInstallPath($pkg);
+        mkdir($originalPath, 0755, true);
+        file_put_contents($originalPath.'/partial.php', 'partial');
+
+        $stash = sys_get_temp_dir().'/module-stash-discard-test-'.uniqid('', true);
+        mkdir($stash);
+        file_put_contents($stash.'/custom.php', '<?php // user file');
+
+        $installer->callRestoreStash($stash, $pkg);
+
+        // Stash was discarded, original path (with partial content) remains
+        $this->assertDirectoryDoesNotExist($stash);
+        $this->assertDirectoryExists($originalPath);
+        $this->assertFileExists($originalPath.'/partial.php');
+
+        (new Filesystem)->remove($originalPath);
     }
 }
