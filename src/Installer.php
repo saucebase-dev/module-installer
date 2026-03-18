@@ -184,6 +184,20 @@ class Installer extends LibraryInstaller
     }
 
     /**
+     * Restore a stashed module directory back to its original install path.
+     * If the original path was re-created (e.g. by a partial update), the stash is discarded.
+     */
+    protected function restoreStash(string $stashPath, PackageInterface $package): void
+    {
+        $originalPath = $this->getInstallPath($package);
+        if (! is_dir($originalPath)) {
+            (new SymfonyFilesystem)->rename($stashPath, $originalPath);
+        } else {
+            (new Filesystem)->removeDirectory($stashPath);
+        }
+    }
+
+    /**
      * Rename the module directory to a temp location and return the temp path.
      * Returns null if the directory does not exist.
      */
@@ -306,9 +320,9 @@ class Installer extends LibraryInstaller
                     (new Filesystem)->removeDirectory($basePath);
                 }
             },
-            function (\Throwable $e) use ($stashPath, $basePath) {
+            function (\Throwable $e) use ($stashPath, $basePath, $initial) {
                 if ($stashPath !== null) {
-                    (new Filesystem)->removeDirectory($stashPath);
+                    $this->restoreStash($stashPath, $initial);
                 }
                 if ($basePath !== null) {
                     (new Filesystem)->removeDirectory($basePath);
