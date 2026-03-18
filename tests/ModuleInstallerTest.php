@@ -219,7 +219,7 @@ final class ModuleInstallerTest extends TestCase
 
     private function makeTempDir(): string
     {
-        $path = sys_get_temp_dir() . '/merge-test-' . uniqid('', true);
+        $path = sys_get_temp_dir().'/merge-test-'.uniqid('', true);
         mkdir($path, 0755, true);
 
         return $path;
@@ -227,21 +227,21 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_merge_stash_applies_upstream_changes_to_unedited_file(): void
     {
-        $io        = $this->createStub(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
-        $stash   = $this->makeTempDir();
-        $base    = $this->makeTempDir();
+        $stash = $this->makeTempDir();
+        $base = $this->makeTempDir();
         $install = $this->makeTempDir();
 
         // base == stash (user made no edits), upstream changed the file
-        file_put_contents($stash   . '/api.php', "line1\nline2\n");
-        file_put_contents($base    . '/api.php', "line1\nline2\n");
-        file_put_contents($install . '/api.php', "line1\nline2-upstream\n");
+        file_put_contents($stash.'/api.php', "line1\nline2\n");
+        file_put_contents($base.'/api.php', "line1\nline2\n");
+        file_put_contents($install.'/api.php', "line1\nline2-upstream\n");
 
         $installer->callMergeStash($stash, $base, $install);
 
-        $this->assertSame("line1\nline2-upstream\n", file_get_contents($install . '/api.php'));
+        $this->assertSame("line1\nline2-upstream\n", file_get_contents($install.'/api.php'));
 
         $fs = new Filesystem;
         $fs->remove($stash);
@@ -251,21 +251,21 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_merge_stash_preserves_user_edits_when_upstream_unchanged(): void
     {
-        $io        = $this->createStub(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
-        $stash   = $this->makeTempDir();
-        $base    = $this->makeTempDir();
+        $stash = $this->makeTempDir();
+        $base = $this->makeTempDir();
         $install = $this->makeTempDir();
 
         // User edited line 2; upstream kept the file as-is
-        file_put_contents($stash   . '/api.php', "line1\nline2-user\n");
-        file_put_contents($base    . '/api.php', "line1\nline2\n");
-        file_put_contents($install . '/api.php', "line1\nline2\n");
+        file_put_contents($stash.'/api.php', "line1\nline2-user\n");
+        file_put_contents($base.'/api.php', "line1\nline2\n");
+        file_put_contents($install.'/api.php', "line1\nline2\n");
 
         $installer->callMergeStash($stash, $base, $install);
 
-        $this->assertSame("line1\nline2-user\n", file_get_contents($install . '/api.php'));
+        $this->assertSame("line1\nline2-user\n", file_get_contents($install.'/api.php'));
 
         $fs = new Filesystem;
         $fs->remove($stash);
@@ -275,24 +275,24 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_merge_stash_merges_non_overlapping_edits(): void
     {
-        $io        = $this->createStub(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
-        $stash   = $this->makeTempDir();
-        $base    = $this->makeTempDir();
+        $stash = $this->makeTempDir();
+        $base = $this->makeTempDir();
         $install = $this->makeTempDir();
 
-        $baseContent  = "line1\nline2\nline3\nline4\nline5\n";
-        $userContent  = "line1-user\nline2\nline3\nline4\nline5\n";   // user changed line 1
+        $baseContent = "line1\nline2\nline3\nline4\nline5\n";
+        $userContent = "line1-user\nline2\nline3\nline4\nline5\n";   // user changed line 1
         $upstreamContent = "line1\nline2\nline3\nline4\nline5-up\n";  // upstream changed line 5
 
-        file_put_contents($stash   . '/api.php', $userContent);
-        file_put_contents($base    . '/api.php', $baseContent);
-        file_put_contents($install . '/api.php', $upstreamContent);
+        file_put_contents($stash.'/api.php', $userContent);
+        file_put_contents($base.'/api.php', $baseContent);
+        file_put_contents($install.'/api.php', $upstreamContent);
 
         $installer->callMergeStash($stash, $base, $install);
 
-        $result = file_get_contents($install . '/api.php');
+        $result = file_get_contents($install.'/api.php');
         $this->assertStringContainsString('line1-user', $result);
         $this->assertStringContainsString('line5-up', $result);
         $this->assertStringNotContainsString('<<<<<<<', $result);
@@ -310,21 +310,21 @@ final class ModuleInstallerTest extends TestCase
 
         $installer = new TestableInstaller($io, null);
 
-        $stash   = $this->makeTempDir();
-        $base    = $this->makeTempDir();
+        $stash = $this->makeTempDir();
+        $base = $this->makeTempDir();
         $install = $this->makeTempDir();
 
         // Both sides changed the same line
-        file_put_contents($stash   . '/api.php', "original\n");
-        file_put_contents($base    . '/api.php', "original\n");
-        file_put_contents($install . '/api.php', "upstream-change\n");
+        file_put_contents($stash.'/api.php', "original\n");
+        file_put_contents($base.'/api.php', "original\n");
+        file_put_contents($install.'/api.php', "upstream-change\n");
 
         // Make the stash differ from base on the same line
-        file_put_contents($stash . '/api.php', "user-change\n");
+        file_put_contents($stash.'/api.php', "user-change\n");
 
         $installer->callMergeStash($stash, $base, $install);
 
-        $result = file_get_contents($install . '/api.php');
+        $result = file_get_contents($install.'/api.php');
         $this->assertStringContainsString('<<<<<<<', $result);
 
         $fs = new Filesystem;
@@ -335,20 +335,20 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_merge_stash_keeps_user_added_files(): void
     {
-        $io        = $this->createStub(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
-        $stash   = $this->makeTempDir();
-        $base    = $this->makeTempDir();
+        $stash = $this->makeTempDir();
+        $base = $this->makeTempDir();
         $install = $this->makeTempDir();
 
         // File only in stash (user added it, never in original dist)
-        file_put_contents($stash . '/user-added.php', '<?php // user file');
+        file_put_contents($stash.'/user-added.php', '<?php // user file');
 
         $installer->callMergeStash($stash, $base, $install);
 
-        $this->assertFileExists($install . '/user-added.php');
-        $this->assertSame('<?php // user file', file_get_contents($install . '/user-added.php'));
+        $this->assertFileExists($install.'/user-added.php');
+        $this->assertSame('<?php // user file', file_get_contents($install.'/user-added.php'));
 
         $fs = new Filesystem;
         $fs->remove($stash);
@@ -358,21 +358,21 @@ final class ModuleInstallerTest extends TestCase
 
     public function test_merge_stash_respects_upstream_deletions(): void
     {
-        $io        = $this->createStub(IOInterface::class);
+        $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
 
-        $stash   = $this->makeTempDir();
-        $base    = $this->makeTempDir();
+        $stash = $this->makeTempDir();
+        $base = $this->makeTempDir();
         $install = $this->makeTempDir();
 
         // File exists in stash and base but upstream removed it (not in install)
-        file_put_contents($stash . '/deleted-upstream.php', 'old content');
-        file_put_contents($base  . '/deleted-upstream.php', 'old content');
+        file_put_contents($stash.'/deleted-upstream.php', 'old content');
+        file_put_contents($base.'/deleted-upstream.php', 'old content');
         // Intentionally NOT present in $install
 
         $installer->callMergeStash($stash, $base, $install);
 
-        $this->assertFileDoesNotExist($install . '/deleted-upstream.php');
+        $this->assertFileDoesNotExist($install.'/deleted-upstream.php');
 
         $fs = new Filesystem;
         $fs->remove($stash);

@@ -208,7 +208,7 @@ class Installer extends LibraryInstaller
         $dm = $this->composer->getDownloadManager();
 
         return $dm->download($initial, $basePath)
-                  ->then(fn () => $dm->install($initial, $basePath));
+            ->then(fn () => $dm->install($initial, $basePath));
     }
 
     /**
@@ -225,14 +225,15 @@ class Installer extends LibraryInstaller
         $finder = (new Finder)->files()->in($stash);
 
         foreach ($finder as $file) {
-            $rel       = $file->getRelativePathname();
-            $stashFile = $stash   . '/' . $rel;
-            $baseFile  = $base    . '/' . $rel;
-            $newFile   = $install . '/' . $rel;
+            $rel = $file->getRelativePathname();
+            $stashFile = $stash.'/'.$rel;
+            $baseFile = $base.'/'.$rel;
+            $newFile = $install.'/'.$rel;
 
             if (! file_exists($baseFile)) {
                 // User-added file (not in original dist) — always keep
                 (new SymfonyFilesystem)->copy($stashFile, $newFile, true);
+
                 continue;
             }
 
@@ -242,12 +243,12 @@ class Installer extends LibraryInstaller
             }
 
             // All three versions exist — 3-way merge
-            $merged = $stashFile . '.merge-work';
+            $merged = $stashFile.'.merge-work';
             copy($stashFile, $merged);
 
             $process = new Process(
                 ['git', 'merge-file', '-L', 'yours', '-L', 'original', '-L', 'upstream',
-                 $merged, $baseFile, $newFile]
+                    $merged, $baseFile, $newFile]
             );
             $process->run();
 
@@ -282,12 +283,12 @@ class Installer extends LibraryInstaller
     public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): ?PromiseInterface
     {
         $stashPath = null;
-        $basePath  = null;
+        $basePath = null;
 
         if ($this->getUpdateStrategy() === self::UPDATE_STRATEGY_MERGE) {
             $stashPath = $this->stashModuleDir($this->getInstallPath($initial));
             if ($stashPath !== null) {
-                $basePath = sys_get_temp_dir() . '/module-base-' . uniqid('', true);
+                $basePath = sys_get_temp_dir().'/module-base-'.uniqid('', true);
             }
         }
 
