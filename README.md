@@ -14,7 +14,7 @@ A Composer plugin that installs Saucebase modules into the correct directory. It
 - Derives the directory name from the package slug: `saucebase/example-module` → `modules/example-module`.
 - On `composer update`, **merges** the new version into your existing module directory by default, preserving local edits. Conflicts are staged in the git index for review.
 - Removes configurable directories (e.g. `.github`, `.git`) after each install or update.
-- Deploys frontend framework files (Vue / React / Svelte) based on the project's `frontend.json` selection.
+- Deploys frontend framework files (Vue / React / Svelte) based on the project's `saucebase.json` selection.
 - Protects path-repository modules (symlinks or local `.git` clones) from being overwritten or deleted.
 - Skips folder deletion by default when a module is removed via `composer remove` — the directory stays on disk for manual review.
 
@@ -167,7 +167,7 @@ To restore the old behaviour and delete the folder automatically:
 
 When a module ships JavaScript resources for multiple frameworks (Vue, React, or Svelte), the installer copies only the files for the active framework flat into `resources/js/` and removes the other framework subdirectories.
 
-The active framework is read from `frontend.json` in the project root:
+The active framework is read from `saucebase.json` in the project root:
 
 ```json
 {
@@ -175,7 +175,7 @@ The active framework is read from `frontend.json` in the project root:
 }
 ```
 
-Valid values are `vue`, `react`, and `svelte`. If `frontend.json` is absent, unreadable, or has `"dev": true`, no framework files are copied and all framework subdirectories are left in place.
+Valid values are `vue`, `react`, and `svelte`. If `saucebase.json` is absent, unreadable, or has `"dev": true`, no framework files are copied and all framework subdirectories are left in place.
 
 Module packages should ship framework files under subdirectories matching the framework name:
 

@@ -424,20 +424,20 @@ class Installer extends LibraryInstaller
     }
 
     /**
-     * Returns the path to frontend.json. Extracted for testability.
+     * Returns the path to saucebase.json. Extracted for testability.
      */
-    protected function getFrontendJsonPath(): string
+    protected function getSaucebaseJsonPath(): string
     {
-        return getcwd().'/frontend.json';
+        return getcwd().'/saucebase.json';
     }
 
     /**
-     * Reads the selected framework from frontend.json.
+     * Reads the selected framework from saucebase.json.
      * Returns null when: file missing, invalid JSON, dev mode active, framework not set, or invalid name.
      */
     protected function getSelectedFramework(): ?string
     {
-        $path = $this->getFrontendJsonPath();
+        $path = $this->getSaucebaseJsonPath();
 
         if (! file_exists($path)) {
             return null;

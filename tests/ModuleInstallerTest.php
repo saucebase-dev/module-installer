@@ -99,16 +99,16 @@ final class TestableInstaller extends Installer
 
     // ---- Framework-aware file copying ----
 
-    private string $frontendJsonPath = '';
+    private string $saucebaseJsonPath = '';
 
-    public function setFrontendJsonPath(string $path): void
+    public function setSaucebaseJsonPath(string $path): void
     {
-        $this->frontendJsonPath = $path;
+        $this->saucebaseJsonPath = $path;
     }
 
-    protected function getFrontendJsonPath(): string
+    protected function getSaucebaseJsonPath(): string
     {
-        return $this->frontendJsonPath !== '' ? $this->frontendJsonPath : parent::getFrontendJsonPath();
+        return $this->saucebaseJsonPath !== '' ? $this->saucebaseJsonPath : parent::getSaucebaseJsonPath();
     }
 
     public function callGetSelectedFramework(): ?string
@@ -1359,10 +1359,18 @@ final class ModuleInstallerTest extends TestCase
     // getSelectedFramework
     // -------------------------------------------------------------------------
 
-    public function test_get_selected_framework_returns_null_when_frontend_json_missing(): void
+    public function test_reads_the_project_config_from_saucebase_json(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setFrontendJsonPath('/nonexistent/path/frontend.json');
+                $path = (new \ReflectionMethod($installer, 'getSaucebaseJsonPath'))->invoke($installer);
+
+        $this->assertSame(getcwd().'/saucebase.json', $path);
+    }
+
+    public function test_get_selected_framework_returns_null_when_saucebase_json_missing(): void
+    {
+        $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
+        $installer->setSaucebaseJsonPath('/nonexistent/path/saucebase.json');
 
         $this->assertNull($installer->callGetSelectedFramework());
     }
@@ -1370,7 +1378,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_get_selected_framework_returns_null_when_framework_key_is_null(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => null]));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => null]));
 
         $this->assertNull($installer->callGetSelectedFramework());
     }
@@ -1381,7 +1389,7 @@ final class ModuleInstallerTest extends TestCase
         file_put_contents($path, 'not-valid-json{{{');
 
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setFrontendJsonPath($path);
+        $installer->setSaucebaseJsonPath($path);
 
         $this->assertNull($installer->callGetSelectedFramework());
 
@@ -1391,7 +1399,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_get_selected_framework_returns_null_when_dev_mode_is_true(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'vue', 'dev' => true]));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue', 'dev' => true]));
 
         $this->assertNull($installer->callGetSelectedFramework());
     }
@@ -1399,7 +1407,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_get_selected_framework_returns_vue_when_set(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'vue']));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue']));
 
         $this->assertSame('vue', $installer->callGetSelectedFramework());
     }
@@ -1407,7 +1415,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_get_selected_framework_returns_react_when_set(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'react']));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'react']));
 
         $this->assertSame('react', $installer->callGetSelectedFramework());
     }
@@ -1417,7 +1425,7 @@ final class ModuleInstallerTest extends TestCase
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
 
         foreach (['angular', 'solid', '../etc', '/abs', 'Vue', ''] as $unknown) {
-            $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => $unknown]));
+            $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => $unknown]));
             $this->assertNull($installer->callGetSelectedFramework(), "Expected null for framework='$unknown'");
         }
     }
@@ -1434,7 +1442,7 @@ final class ModuleInstallerTest extends TestCase
         mkdir($moduleDir, 0755, true);
 
         $installer = $this->makeInstallerWithModuleDir($baseDir);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'vue']));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue']));
 
         $pkg = new Package('saucebase/no-js', '1.0.0.0', '1.0.0');
 
@@ -1456,7 +1464,7 @@ final class ModuleInstallerTest extends TestCase
         file_put_contents($jsRoot.'/vue/app.ts', 'content');
 
         $installer = $this->makeInstallerWithModuleDir($baseDir);
-        $installer->setFrontendJsonPath('/nonexistent/frontend.json'); // framework = null
+        $installer->setSaucebaseJsonPath('/nonexistent/saucebase.json'); // framework = null
 
         $pkg = new Package('saucebase/skip-module', '1.0.0.0', '1.0.0');
 
@@ -1477,7 +1485,7 @@ final class ModuleInstallerTest extends TestCase
         mkdir($moduleDir.'/resources/js', 0755, true);
 
         $installer = $this->makeInstallerWithModuleDir($baseDir);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'react']));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'react']));
 
         $pkg = new Package('saucebase/vue-only', '1.0.0.0', '1.0.0');
 
@@ -1504,7 +1512,7 @@ final class ModuleInstallerTest extends TestCase
         file_put_contents($jsRoot.'/react/app.tsx', 'react app');
 
         $installer = $this->makeInstallerWithModuleDir($baseDir);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'vue']));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue']));
 
         $pkg = new Package('saucebase/flatten-test', '1.0.0.0', '1.0.0');
 
@@ -1533,7 +1541,7 @@ final class ModuleInstallerTest extends TestCase
         file_put_contents($jsRoot.'/svelte/app.svelte', 'svelte app');
 
         $installer = $this->makeInstallerWithModuleDir($baseDir);
-        $installer->setFrontendJsonPath($this->writeFrontendJson(['framework' => 'vue']));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue']));
 
         $pkg = new Package('saucebase/multi-fw', '1.0.0.0', '1.0.0');
         $installer->callCopyFrameworkFiles($pkg);
@@ -1574,7 +1582,7 @@ final class ModuleInstallerTest extends TestCase
     {
         $io = $this->createStub(IOInterface::class);
         $installer = new TestableInstaller($io, null);
-        $installer->setFrontendJsonPath('/nonexistent/frontend.json'); // returns null → skips copy
+        $installer->setSaucebaseJsonPath('/nonexistent/saucebase.json'); // returns null → skips copy
 
         $pkg = $this->createStub(PackageInterface::class);
         $pkg->method('getDistType')->willReturn('zip');

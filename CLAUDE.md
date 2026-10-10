@@ -26,7 +26,7 @@ The Saucebase app (`saucebase/composer.json`) uses `module-type: saucebase-modul
 
 ## Core Behaviours
 
-**Install** (`install()`): Downloads the package, removes excluded directories, and deploys frontend framework files if `frontend.json` is present. Skips entirely for path-repository packages, locally tracked dirs, and any install path that already contains files (copy-and-own: a committed `modules/` dir must survive `composer install` on a fresh deploy).
+**Install** (`install()`): Downloads the package, removes excluded directories, and deploys frontend framework files if `saucebase.json` is present. Skips entirely for path-repository packages, locally tracked dirs, and any install path that already contains files (copy-and-own: a committed `modules/` dir must survive `composer install` on a fresh deploy).
 
 **Update** (`update()`): Two strategies:
 - `merge` (default) — stashes the user's copy, downloads the new version, downloads the original version as a base, runs a 3-way `git merge-file`. Conflicts are staged in the git index (stages 1/2/3) so they appear in `git status`.
@@ -38,7 +38,7 @@ Skips for path-repository packages.
 2. `module-delete-on-remove` not set → skip by default (folder stays, package removed from Composer tracking).
 Only calls `parent::uninstall()` (which deletes the folder) when `module-delete-on-remove: true` is explicitly set.
 
-**Frontend framework support**: Reads `frontend.json` from the project root. Copies files from the matching framework subdirectory (`vue/`, `react/`, or `svelte/`) flat into `resources/js/` and removes all framework subdirs. Silent-skips when `frontend.json` is absent or `"dev": true`.
+**Frontend framework support**: Reads `saucebase.json` from the project root. Copies files from the matching framework subdirectory (`vue/`, `react/`, or `svelte/`) flat into `resources/js/` and removes all framework subdirs. Silent-skips when `saucebase.json` is absent or `"dev": true`.
 
 ## Development Commands
 
