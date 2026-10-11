@@ -1529,6 +1529,49 @@ final class ModuleInstallerTest extends TestCase
         (new Filesystem)->remove($moduleDir);
     }
 
+    public function test_flattening_keeps_relative_imports_pointing_at_shared_files(): void
+    {
+        $baseDir = sys_get_temp_dir();
+        $moduleDir = $baseDir.'/relative-imports';
+        $jsRoot = $moduleDir.'/resources/js';
+        mkdir($jsRoot.'/vue/components', 0755, true);
+        mkdir($jsRoot.'/lib', 0755, true);
+        file_put_contents($jsRoot.'/lib/money.ts', 'export const money = 1;');
+        file_put_contents($jsRoot.'/vue/app.ts', implode("\n", [
+            "import { branding } from '../branding';",
+            "import Card from './components/Card.vue';",
+        ]));
+        file_put_contents($jsRoot.'/vue/components/Card.vue', implode("\n", [
+            "import { money } from '../../lib/money';",
+            "import type { Plan } from '../../types';",
+            "import Other from './Other.vue';",
+            "import { helper } from '../helper';",
+            "const lazy = () => import('../../lib/money');",
+        ]));
+
+        $installer = $this->makeInstallerWithModuleDir($baseDir);
+        $installer->setSaucebaseJsonPath($this->writeSaucebaseJson(['framework' => 'vue']));
+
+        $installer->callCopyFrameworkFiles(new Package('saucebase/relative-imports', '1.0.0.0', '1.0.0'));
+
+        // The file moved up one folder, so an import that left the framework folder is one step shorter.
+        $this->assertSame(implode("\n", [
+            "import { branding } from './branding';",
+            "import Card from './components/Card.vue';",
+        ]), file_get_contents($jsRoot.'/app.ts'));
+
+        // Imports that stayed inside the framework folder moved with the file and are untouched.
+        $this->assertSame(implode("\n", [
+            "import { money } from '../lib/money';",
+            "import type { Plan } from '../types';",
+            "import Other from './Other.vue';",
+            "import { helper } from '../helper';",
+            "const lazy = () => import('../lib/money');",
+        ]), file_get_contents($jsRoot.'/components/Card.vue'));
+
+        (new Filesystem)->remove($moduleDir);
+    }
+
     public function test_copy_framework_files_removes_all_known_framework_subdirs(): void
     {
         $baseDir = sys_get_temp_dir();

@@ -551,6 +551,7 @@ class Installer extends LibraryInstaller
         }
 
         $this->copyDirectory($jsRoot.'/'.$framework, $jsRoot);
+        $this->shortenImportsLeavingTheFrameworkFolder($jsRoot, array_keys($targetPaths));
 
         $fs = new Filesystem;
         foreach (self::KNOWN_FRAMEWORKS as $fw) {
@@ -561,6 +562,44 @@ class Installer extends LibraryInstaller
         foreach ($stale as $rel) {
             if (file_exists($jsRoot.'/'.$rel)) {
                 $sfFs->remove($jsRoot.'/'.$rel);
+            }
+        }
+    }
+
+    /**
+     * A flattened file sits one folder higher than it did, so a relative import that
+     * reached outside its framework folder (shared `lib/`, `types`) is one `../` too long.
+     * Imports that stayed inside the folder moved along with the file and stay as they are.
+     *
+     * @param  list<string>  $files  Paths relative to $jsRoot, as they were inside the framework folder.
+     */
+    private function shortenImportsLeavingTheFrameworkFolder(string $jsRoot, array $files): void
+    {
+        foreach ($files as $relative) {
+            if (! in_array(pathinfo($relative, PATHINFO_EXTENSION), ['vue', 'ts', 'tsx', 'js'], true)) {
+                continue;
+            }
+
+            $depth = substr_count(str_replace('\\', '/', $relative), '/');
+            $path = $jsRoot.'/'.$relative;
+            $content = file_get_contents($path);
+
+            $rewritten = preg_replace_callback(
+                '#((?:from|import|require)\s*\(?\s*[\'"])((?:\.\./)+)#',
+                function (array $match) use ($depth) {
+                    $levels = substr_count($match[2], '../');
+
+                    if ($levels <= $depth) {
+                        return $match[0];
+                    }
+
+                    return $match[1].($levels === 1 ? './' : str_repeat('../', $levels - 1));
+                },
+                $content
+            );
+
+            if ($rewritten !== $content) {
+                file_put_contents($path, $rewritten);
             }
         }
     }
