@@ -1364,7 +1364,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_reads_the_project_config_from_saucebase_json(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-                $path = (new \ReflectionMethod($installer, 'getSaucebaseJsonPath'))->invoke($installer);
+        $path = (new \ReflectionMethod($installer, 'getSaucebaseJsonPath'))->invoke($installer);
 
         $this->assertSame(getcwd().'/saucebase.json', $path);
     }
