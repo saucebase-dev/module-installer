@@ -17,7 +17,7 @@ All read from the root `composer.json` `extra` section. Constants in `Installer.
 | Key | Constant | Default |
 |---|---|---|
 | `module-dir` | `DEFAULT_ROOT` | `modules` |
-| `module-type` | `DEFAULT_MODULE_TYPE` | `laravel-module` |
+| `module-type` | `DEFAULT_MODULE_TYPES` | `saucebase-module`, `laravel-module` |
 | `module-exclude-dirs` | `DEFAULT_EXCLUDED_DIRS` | `['.github', '.git']` |
 | `module-update-strategy` | `DEFAULT_UPDATE_STRATEGY` | `merge` |
 | `module-delete-on-remove` | *(no constant)* | `false` |
@@ -38,7 +38,7 @@ Skips for path-repository packages.
 2. `module-delete-on-remove` not set → skip by default (folder stays, package removed from Composer tracking).
 Only calls `parent::uninstall()` (which deletes the folder) when `module-delete-on-remove: true` is explicitly set.
 
-**Frontend framework support**: Reads `saucebase.json` from the project root. Copies files from the matching framework subdirectory (`vue/`, `react/`, or `svelte/`) flat into `resources/js/` and removes all framework subdirs. Silent-skips when `saucebase.json` is absent or `"dev": true`.
+**Frontend framework support**: Reads `saucebase.json` from the project root. Copies files from the matching framework subdirectory (`vue/` or `react/`) flat into `resources/js/` and removes all framework subdirs. Silent-skips when `saucebase.json` is absent or `"contributor": true`.
 
 ## Development Commands
 

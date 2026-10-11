@@ -22,13 +22,14 @@ class Installer extends LibraryInstaller
 {
     const DEFAULT_ROOT = 'modules';
 
-    const DEFAULT_MODULE_TYPE = 'laravel-module';
+    /** Saucebase's own modules, and the ones an application writes. */
+    const DEFAULT_MODULE_TYPES = ['saucebase-module', 'laravel-module'];
 
     const DEFAULT_EXCLUDED_DIRS = ['.github', '.git'];
 
     const DEFAULT_UPDATE_STRATEGY = 'merge';
 
-    const KNOWN_FRAMEWORKS = ['vue', 'react', 'svelte'];
+    const KNOWN_FRAMEWORKS = ['vue', 'react'];
 
     const UPDATE_STRATEGY_MERGE = 'merge';
 
@@ -85,22 +86,25 @@ class Installer extends LibraryInstaller
 
     public function supports($packageType)
     {
-        return $packageType === $this->getSupportedModuleType();
+        return in_array($packageType, $this->getSupportedModuleTypes(), true);
     }
 
-    protected function getSupportedModuleType()
+    /**
+     * @return list<string>
+     */
+    protected function getSupportedModuleTypes(): array
     {
         if (! $this->composer || ! $this->composer->getPackage()) {
-            return self::DEFAULT_MODULE_TYPE;
+            return self::DEFAULT_MODULE_TYPES;
         }
 
         $extra = $this->composer->getPackage()->getExtra();
 
         if (! $extra || empty($extra['module-type'])) {
-            return self::DEFAULT_MODULE_TYPE;
+            return self::DEFAULT_MODULE_TYPES;
         }
 
-        return $extra['module-type'];
+        return [$extra['module-type']];
     }
 
     /**
