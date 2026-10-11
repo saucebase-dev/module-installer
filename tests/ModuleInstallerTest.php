@@ -1399,7 +1399,7 @@ final class ModuleInstallerTest extends TestCase
     public function test_get_selected_framework_returns_null_when_dev_mode_is_true(): void
     {
         $installer = new TestableInstaller($this->createStub(IOInterface::class), null);
-        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue', 'dev' => true]));
+        $installer->setSaucebaseJsonPath($this->writeFrontendJson(['framework' => 'vue', 'contributor' => true]));
 
         $this->assertNull($installer->callGetSelectedFramework());
     }

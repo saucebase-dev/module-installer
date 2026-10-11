@@ -433,7 +433,7 @@ class Installer extends LibraryInstaller
 
     /**
      * Reads the selected framework from saucebase.json.
-     * Returns null when: file missing, invalid JSON, dev mode active, framework not set, or invalid name.
+     * Returns null when: file missing, invalid JSON, contributor checkout, framework not set, or invalid name.
      */
     protected function getSelectedFramework(): ?string
     {
@@ -445,7 +445,7 @@ class Installer extends LibraryInstaller
 
         $data = json_decode(file_get_contents($path), true);
 
-        if (! is_array($data) || ($data['dev'] ?? false)) {
+        if (! is_array($data) || ($data['contributor'] ?? false)) {
             return null;
         }
 
