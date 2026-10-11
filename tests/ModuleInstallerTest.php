@@ -197,13 +197,13 @@ final class ModuleInstallerTest extends TestCase
         $composer = $this->createStub(Composer::class);
 
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
-        $root->setExtra(['module-type' => 'acme-module']);
+        $root->setExtra(['module-type' => 'saucebase-module']);
         $composer->method('getPackage')->willReturn($root);
 
         $installer = new TestableInstaller($io, $composer);
 
-        $this->assertTrue($installer->supports('acme-module'));
-        $this->assertFalse($installer->supports('saucebase-module'));
+        $this->assertTrue($installer->supports('saucebase-module'));
+        $this->assertFalse($installer->supports('laravel-module'));
     }
 
     public function test_get_install_path_uses_default_modules_dir_when_no_composer(): void
