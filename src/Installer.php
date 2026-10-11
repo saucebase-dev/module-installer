@@ -22,13 +22,14 @@ class Installer extends LibraryInstaller
 {
     const DEFAULT_ROOT = 'modules';
 
-    const DEFAULT_MODULE_TYPE = 'laravel-module';
+    /** Saucebase's own modules, and the ones an application writes. */
+    const DEFAULT_MODULE_TYPES = ['saucebase-module', 'laravel-module'];
 
     const DEFAULT_EXCLUDED_DIRS = ['.github', '.git'];
 
     const DEFAULT_UPDATE_STRATEGY = 'merge';
 
-    const KNOWN_FRAMEWORKS = ['vue', 'react', 'svelte'];
+    const KNOWN_FRAMEWORKS = ['vue', 'react'];
 
     const UPDATE_STRATEGY_MERGE = 'merge';
 
@@ -85,22 +86,25 @@ class Installer extends LibraryInstaller
 
     public function supports($packageType)
     {
-        return $packageType === $this->getSupportedModuleType();
+        return in_array($packageType, $this->getSupportedModuleTypes(), true);
     }
 
-    protected function getSupportedModuleType()
+    /**
+     * @return list<string>
+     */
+    protected function getSupportedModuleTypes(): array
     {
         if (! $this->composer || ! $this->composer->getPackage()) {
-            return self::DEFAULT_MODULE_TYPE;
+            return self::DEFAULT_MODULE_TYPES;
         }
 
         $extra = $this->composer->getPackage()->getExtra();
 
         if (! $extra || empty($extra['module-type'])) {
-            return self::DEFAULT_MODULE_TYPE;
+            return self::DEFAULT_MODULE_TYPES;
         }
 
-        return $extra['module-type'];
+        return [$extra['module-type']];
     }
 
     /**
@@ -424,20 +428,20 @@ class Installer extends LibraryInstaller
     }
 
     /**
-     * Returns the path to frontend.json. Extracted for testability.
+     * Returns the path to saucebase.json. Extracted for testability.
      */
-    protected function getFrontendJsonPath(): string
+    protected function getSaucebaseJsonPath(): string
     {
-        return getcwd().'/frontend.json';
+        return getcwd().'/saucebase.json';
     }
 
     /**
-     * Reads the selected framework from frontend.json.
-     * Returns null when: file missing, invalid JSON, dev mode active, framework not set, or invalid name.
+     * Reads the selected framework from saucebase.json.
+     * Returns null when: file missing, invalid JSON, contributor checkout, framework not set, or invalid name.
      */
     protected function getSelectedFramework(): ?string
     {
-        $path = $this->getFrontendJsonPath();
+        $path = $this->getSaucebaseJsonPath();
 
         if (! file_exists($path)) {
             return null;
@@ -445,7 +449,7 @@ class Installer extends LibraryInstaller
 
         $data = json_decode(file_get_contents($path), true);
 
-        if (! is_array($data) || ($data['dev'] ?? false)) {
+        if (! is_array($data) || ($data['contributor'] ?? false)) {
             return null;
         }
 
