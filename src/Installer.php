@@ -35,6 +35,9 @@ class Installer extends LibraryInstaller
 
     const UPDATE_STRATEGY_OVERWRITE = 'overwrite';
 
+    /** Backups kept per module before an update or removal changes its folder. */
+    const DEFAULT_BACKUPS = 3;
+
     public function getInstallPath(PackageInterface $package)
     {
         return $this->getBaseInstallationPath().'/'.$this->getModuleName($package);
@@ -141,6 +144,8 @@ class Installer extends LibraryInstaller
         if (empty($excludedDirs)) {
             return;
         }
+
+        $this->assertOwnCopy($installPath, placedByComposer: true);
 
         $filesystem = new Filesystem;
 
@@ -475,6 +480,8 @@ class Installer extends LibraryInstaller
             return;
         }
 
+        $this->assertOwnCopy($this->getInstallPath($package), placedByComposer: true);
+
         $framework = $this->getSelectedFramework();
 
         if (! $framework) {
@@ -633,6 +640,8 @@ class Installer extends LibraryInstaller
      */
     public function install(InstalledRepositoryInterface $repo, PackageInterface $package): ?PromiseInterface
     {
+        $this->refuseSymlinkedSourceOutsideApp($package);
+
         if ($this->isPathRepository($package)) {
             $this->io->write("  - <info>Skipping install for path repository:</info> {$package->getPrettyName()}");
 
@@ -671,6 +680,14 @@ class Installer extends LibraryInstaller
         $promise = $this->parentInstall($repo, $package);
 
         return $promise->then(function () use ($package) {
+            // Checked again now that Composer has placed the files: a path repository is a
+            // symlink only from this point, and stripping through it would edit the source.
+            if (is_link($this->getInstallPath($package))) {
+                $this->io->write("  - <info>Skipping copy-and-own for linked module:</info> {$package->getPrettyName()}");
+
+                return;
+            }
+
             $this->removeExcludedDirectories($package);
             $this->copyFrameworkFiles($package);
         });
@@ -700,6 +717,8 @@ class Installer extends LibraryInstaller
      */
     public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): ?PromiseInterface
     {
+        $this->refuseSymlinkedSourceOutsideApp($target);
+
         if ($this->isPathRepository($target)) {
             $this->io->write("  - <info>Skipping update for path repository:</info> {$target->getPrettyName()}");
 
@@ -748,6 +767,9 @@ class Installer extends LibraryInstaller
 
             return \React\Promise\resolve(null);
         }
+
+        $this->assertOwnCopy($installPath);
+        $this->backupModule($installPath, $initial);
 
         $stashPath = null;
         $basePath = null;
@@ -864,6 +886,108 @@ class Installer extends LibraryInstaller
             return \React\Promise\resolve(null);
         }
 
+        $this->assertOwnCopy($this->getInstallPath($package));
+        $this->backupModule($this->getInstallPath($package), $package);
+
         return parent::uninstall($repo, $package);
+    }
+
+    /**
+     * Refuses to change a module folder that isn't the app's own copy: a symlink, a git
+     * checkout, or anything resolving outside the modules directory. Every step that deletes
+     * or rewrites module files calls this right before it does.
+     *
+     * A folder Composer has just placed is the app's even with a `.git` in it: a path
+     * repository with `symlink: false` copies the whole source, history included.
+     *
+     * @throws ModuleInstallerException
+     */
+    protected function assertOwnCopy(string $installPath, bool $placedByComposer = false): void
+    {
+        if (! file_exists($installPath) && ! is_link($installPath)) {
+            return;
+        }
+
+        $modules = realpath($this->getBaseInstallationPath());
+        $real = realpath($installPath);
+
+        if (is_link($installPath) || (! $placedByComposer && is_dir($installPath.'/.git')) || $modules === false || $real === false
+            || ! str_starts_with($real, $modules.DIRECTORY_SEPARATOR)) {
+            throw new ModuleInstallerException(
+                "Refusing to change {$installPath}: it is a symlink, a git checkout, or outside {$this->getBaseInstallationPath()}/. "
+                .'The installer only changes its own copy of a module.'
+            );
+        }
+    }
+
+    /**
+     * A path repository outside the app is symlinked by default, so anything the installer
+     * then does to the module happens in that source folder. Stops before Composer creates
+     * the link, unless the app opts in with `extra.module-allow-symlink`.
+     *
+     * @throws ModuleInstallerException
+     */
+    protected function refuseSymlinkedSourceOutsideApp(PackageInterface $package): void
+    {
+        if ($package->getDistType() !== 'path' || ($package->getTransportOptions()['symlink'] ?? true) === false) {
+            return;
+        }
+
+        if ($this->composer && ($this->composer->getPackage()->getExtra()['module-allow-symlink'] ?? false)) {
+            return;
+        }
+
+        $source = $package->getDistUrl() ? realpath($package->getDistUrl()) : false;
+
+        if ($source === false) {
+            return;
+        }
+
+        // Inside the app (its own modules/* path repository) the link points at itself.
+        foreach ([getcwd() ?: '.', $this->getBaseInstallationPath()] as $inside) {
+            $inside = realpath($inside);
+            if ($inside !== false && ($source === $inside || str_starts_with($source, $inside.DIRECTORY_SEPARATOR))) {
+                return;
+            }
+        }
+
+        throw new ModuleInstallerException(
+            "{$package->getPrettyName()} comes from {$source}, outside this app, through a symlink. "
+            .'Installing it would change that folder. Copy it instead: add "options": {"symlink": false} '
+            .'to its path repository, or set "extra": {"module-allow-symlink": true} to allow the link.'
+        );
+    }
+
+    /** Where module backups go: inside the app, ignored by Laravel's storage/app/.gitignore. */
+    protected function getBackupRoot(): string
+    {
+        return (getcwd() ?: '.').'/storage/app/module-backups';
+    }
+
+    /**
+     * Archives the module folder, dotfiles included, before an update or removal changes it,
+     * and keeps the newest `extra.module-backups` archives (default 3, 0 turns backups off).
+     * Restore one with: tar -xzf <archive> -C <modules dir>
+     */
+    protected function backupModule(string $installPath, PackageInterface $package): void
+    {
+        $keep = (int) ($this->composer?->getPackage()?->getExtra()['module-backups'] ?? self::DEFAULT_BACKUPS);
+
+        if ($keep < 1 || ! is_dir($installPath) || is_link($installPath)) {
+            return;
+        }
+
+        $dir = $this->getBackupRoot().'/'.basename($installPath);
+        $archive = $dir.'/'.date('Ymd-His').'-'.$package->getPrettyVersion().'.tar.gz';
+        (new SymfonyFilesystem)->mkdir($dir);
+
+        (new Process(['tar', '-czf', $archive, '-C', dirname($installPath), basename($installPath)]))->mustRun();
+        $this->io->write("  - Backed up <info>{$package->getPrettyName()}</info> to {$archive}");
+
+        $archives = glob($dir.'/*.tar.gz') ?: [];
+        sort($archives);
+        foreach (array_slice($archives, 0, max(0, count($archives) - $keep)) as $old) {
+            unlink($old);
+        }
     }
 }
