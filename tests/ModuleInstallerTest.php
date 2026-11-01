@@ -1990,4 +1990,73 @@ final class ModuleInstallerTest extends TestCase
 
         (new Filesystem)->remove([$baseDir, $source]);
     }
+
+    public function test_a_worktree_checkout_is_never_changed(): void
+    {
+        // Worktrees and submodules have a .git file pointing at the real git dir, not a folder.
+        $baseDir = sys_get_temp_dir().'/update-worktree-'.uniqid('', true);
+        mkdir($baseDir.'/test-module', 0755, true);
+        file_put_contents($baseDir.'/test-module/.git', 'gitdir: /elsewhere/.git/worktrees/test-module');
+        file_put_contents($baseDir.'/test-module/composer.json', '{"edited": true}');
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->backupRoot = $baseDir.'/backups';
+
+        $initial = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $initial->setDistType('zip');
+        $target = new Package('saucebase/test-module', '2.0.0.0', '2.0.0');
+        $target->setDistType('zip');
+
+        $installer->update($this->createStub(InstalledRepositoryInterface::class), $initial, $target);
+
+        $this->assertFileExists($baseDir.'/test-module/.git');
+        $this->assertStringContainsString('edited', (string) file_get_contents($baseDir.'/test-module/composer.json'));
+        $this->assertFalse($installer->downloadBaseInvoked);
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    public function test_a_branch_version_backs_up_as_one_file(): void
+    {
+        $baseDir = sys_get_temp_dir().'/backup-branch-'.uniqid('', true);
+        mkdir($baseDir.'/test-module', 0755, true);
+        file_put_contents($baseDir.'/test-module/composer.json', '{}');
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->backupRoot = $baseDir.'/backups';
+
+        $initial = new Package('saucebase/test-module', 'dev-feature/foo', 'dev-feature/foo');
+        $initial->setDistType('zip');
+        $target = new Package('saucebase/test-module', '2.0.0.0', '2.0.0');
+        $target->setDistType('zip');
+
+        $installer->update($this->createStub(InstalledRepositoryInterface::class), $initial, $target);
+
+        $archives = glob($baseDir.'/backups/test-module/*.tar.gz');
+        $this->assertCount(1, $archives);
+        $this->assertStringContainsString('dev-feature-foo', basename($archives[0]));
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    public function test_composer_mirror_path_repos_counts_as_a_copy(): void
+    {
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/outside-env-mirror-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+        putenv('COMPOSER_MIRROR_PATH_REPOS=1');
+
+        try {
+            $installer = $this->makeSafetyInstaller($baseDir);
+            $installer->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source));
+            $this->assertTrue($installer->parentInstallInvoked);
+
+            // An explicit symlink: true still wins over the environment, as in Composer.
+            $this->expectException(ModuleInstallerException::class);
+            $this->makeSafetyInstaller($baseDir)->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source, true));
+        } finally {
+            putenv('COMPOSER_MIRROR_PATH_REPOS');
+            (new Filesystem)->remove([$baseDir, $source]);
+        }
+    }
 }

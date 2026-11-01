@@ -384,7 +384,8 @@ class Installer extends LibraryInstaller
      */
     protected function isLocallyTracked(string $path): bool
     {
-        return is_link($path) || is_dir($path.'/.git');
+        // A worktree or submodule has a .git file pointing at its git dir, not a folder.
+        return is_link($path) || file_exists($path.'/.git');
     }
 
     /**
@@ -911,7 +912,7 @@ class Installer extends LibraryInstaller
         $modules = realpath($this->getBaseInstallationPath());
         $real = realpath($installPath);
 
-        if (is_link($installPath) || (! $placedByComposer && is_dir($installPath.'/.git')) || $modules === false || $real === false
+        if (is_link($installPath) || (! $placedByComposer && file_exists($installPath.'/.git')) || $modules === false || $real === false
             || ! str_starts_with($real, $modules.DIRECTORY_SEPARATOR)) {
             throw new ModuleInstallerException(
                 "Refusing to change {$installPath}: it is a symlink, a git checkout, or outside {$this->getBaseInstallationPath()}/. "
@@ -929,7 +930,10 @@ class Installer extends LibraryInstaller
      */
     protected function refuseSymlinkedSourceOutsideApp(PackageInterface $package): void
     {
-        if ($package->getDistType() !== 'path' || ($package->getTransportOptions()['symlink'] ?? true) === false) {
+        // Composer's own choice: an explicit `symlink` option wins, then COMPOSER_MIRROR_PATH_REPOS.
+        $symlink = $package->getTransportOptions()['symlink'] ?? ! getenv('COMPOSER_MIRROR_PATH_REPOS');
+
+        if ($package->getDistType() !== 'path' || $symlink === false) {
             return;
         }
 
@@ -978,7 +982,9 @@ class Installer extends LibraryInstaller
         }
 
         $dir = $this->getBackupRoot().'/'.basename($installPath);
-        $archive = $dir.'/'.date('Ymd-His').'-'.$package->getPrettyVersion().'.tar.gz';
+        // A branch version (dev-feature/foo) has slashes; the archive is one file.
+        $version = preg_replace('/[^A-Za-z0-9._-]+/', '-', $package->getPrettyVersion());
+        $archive = $dir.'/'.date('Ymd-His').'-'.$version.'.tar.gz';
         (new SymfonyFilesystem)->mkdir($dir);
 
         (new Process(['tar', '-czf', $archive, '-C', dirname($installPath), basename($installPath)]))->mustRun();
