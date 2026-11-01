@@ -45,6 +45,8 @@ All options live in the `extra` section of the **root** `composer.json`. Every k
 | `module-exclude-dirs` | `[".github", ".git"]` | Directories removed from each module after install/update. |
 | `module-update-strategy` | `merge` | `merge` preserves local edits; `overwrite` replaces entirely. |
 | `module-delete-on-remove` | `false` | Set to `true` to delete the module folder on `composer remove`. |
+| `module-backups` | `3` | Backups kept per module before an update or removal changes its folder. `0` turns them off. |
+| `module-allow-symlink` | `false` | Set to `true` to allow a symlinked path repository outside the app. |
 
 Example (the Saucebase app configuration):
 
@@ -163,6 +165,40 @@ To restore the old behaviour and delete the folder automatically:
 
 > **Why skip by default?** A `composer remove` followed by `composer install` in CI will not re-download an untracked folder — but it also will not delete your work. The conservative default prevents accidental data loss; opt in to deletion explicitly.
 
+## Safety
+
+The installer only ever changes its own copy of a module in `modules/`. Before it deletes or
+rewrites anything there, it checks the folder is a real directory inside `modules/`, not a
+symlink and not a git checkout, and stops with an error otherwise.
+
+### Backups
+
+Before an update or a removal changes a module's folder, the installer archives it, hidden files
+included, to `storage/app/module-backups/<module>/<date>-<version>.tar.gz`. Laravel's
+`storage/app/.gitignore` already keeps them out of git. The newest three are kept per module; set
+`module-backups` to change that, or `0` to turn them off. To restore one:
+
+```bash
+tar -xzf storage/app/module-backups/billing/20261101-120000-v2.1.0.tar.gz -C modules
+```
+
+### Path repositories outside the app
+
+A `path` repository is symlinked by default, so a module from a folder outside the app would be
+changed in that folder (its `.git`, `.github` and unused framework files removed). The installer
+refuses it and prints the fix. Copy the module instead:
+
+```json
+{
+    "repositories": [
+        { "type": "path", "url": "../my-modules/*", "options": { "symlink": false } }
+    ]
+}
+```
+
+To keep the link anyway, set `"module-allow-symlink": true`. The installer then leaves the
+linked module as it is.
+
 ## Frontend Framework Support
 
 When a module ships JavaScript resources for multiple frameworks (Vue, React, or Svelte), the installer copies only the files for the active framework flat into `resources/js/` and removes the other framework subdirectories.
@@ -221,7 +257,7 @@ composer install
 Useful scripts:
 
 - `composer test` — run the PHPUnit 12 suite (`tests/`).
-- `./vendor/bin/pint` — apply Laravel Pint formatting (add `--test` for CI-style checks).
+- `composer lint` — apply Laravel Pint formatting; `composer lint:test` checks it, as CI does.
 - `composer validate` — verify Composer metadata.
 
 ## License

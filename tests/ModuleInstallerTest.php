@@ -152,11 +152,30 @@ final class TestableInstaller extends Installer
 
     public bool $parentInstallInvoked = false;
 
+    /** Stands in for what Composer puts on disk, e.g. a symlink from a path repository. */
+    public ?\Closure $onParentInstall = null;
+
     protected function parentInstall(InstalledRepositoryInterface $repo, PackageInterface $package): PromiseInterface
     {
         $this->parentInstallInvoked = true;
+        if ($this->onParentInstall) {
+            ($this->onParentInstall)($package);
+        }
 
         return \React\Promise\resolve(null);
+    }
+
+    public function callRemoveExcludedDirectories(PackageInterface $package): void
+    {
+        parent::removeExcludedDirectories($package);
+    }
+
+    public string $backupRoot = '';
+
+    protected function getBackupRoot(): string
+    {
+        // Never the real working directory: tests would leave archives in the repo.
+        return $this->backupRoot !== '' ? $this->backupRoot : sys_get_temp_dir().'/module-backups-test';
     }
 
     public bool $downloadBaseInvoked = false;
@@ -1752,5 +1771,292 @@ final class ModuleInstallerTest extends TestCase
         $this->assertDirectoryDoesNotExist($jsRoot.'/react');
 
         (new Filesystem)->remove($jsRoot);
+    }
+
+    // -------------------------------------------------------------------------
+    // Safety: never change files outside the app's own module copy
+    // -------------------------------------------------------------------------
+
+    /** A module's working repo, as a developer has it: history, CI, both stacks. */
+    private function makeSourceRepo(): string
+    {
+        $source = sys_get_temp_dir().'/module-source-'.uniqid('', true);
+        foreach (['.git', '.github/workflows', 'resources/js/vue/pages', 'resources/js/react/pages'] as $dir) {
+            mkdir($source.'/'.$dir, 0755, true);
+        }
+        file_put_contents($source.'/.git/HEAD', 'ref: refs/heads/main');
+        file_put_contents($source.'/.github/workflows/ci.yml', 'on: push');
+        file_put_contents($source.'/resources/js/vue/pages/Index.vue', '<template/>');
+        file_put_contents($source.'/resources/js/react/pages/Index.tsx', 'export {}');
+        file_put_contents($source.'/composer.json', '{}');
+
+        return $source;
+    }
+
+    private function assertSourceUntouched(string $source): void
+    {
+        $this->assertFileExists($source.'/.git/HEAD');
+        $this->assertFileExists($source.'/.github/workflows/ci.yml');
+        $this->assertFileExists($source.'/resources/js/vue/pages/Index.vue');
+        $this->assertFileExists($source.'/resources/js/react/pages/Index.tsx');
+        $this->assertFileDoesNotExist($source.'/resources/js/pages/Index.vue');
+    }
+
+    private function makeSafetyInstaller(string $baseDir, array $extra = []): TestableInstaller
+    {
+        $composer = $this->createStub(Composer::class);
+        $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
+        $root->setExtra(['module-dir' => $baseDir] + $extra);
+        $composer->method('getPackage')->willReturn($root);
+
+        $installer = new TestableInstaller($this->createStub(IOInterface::class), $composer);
+        $installer->setSaucebaseJsonPath($this->writeSaucebaseJson(['framework' => 'vue']));
+
+        return $installer;
+    }
+
+    private function pathPackage(string $source, ?bool $symlink = null): Package
+    {
+        $pkg = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $pkg->setDistType('path');
+        $pkg->setDistUrl($source);
+        $pkg->setTransportOptions($symlink === null ? [] : ['symlink' => $symlink]);
+
+        return $pkg;
+    }
+
+    public function test_install_leaves_the_source_repo_alone_when_composer_symlinks_it(): void
+    {
+        // What wiped the module repos: the install-time check ran before Composer created the
+        // symlink, then .git, .github and the react/ folder were removed through it.
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/install-symlinked-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+
+        $installer = $this->makeSafetyInstaller($baseDir, ['module-allow-symlink' => true]);
+        $installer->onParentInstall = fn () => symlink($source, $baseDir.'/test-module');
+
+        $repo = $this->createStub(InstalledRepositoryInterface::class);
+        $installer->install($repo, $this->pathPackage($source, true));
+
+        $this->assertSourceUntouched($source);
+
+        (new Filesystem)->remove([$baseDir.'/test-module', $baseDir, $source]);
+    }
+
+    public function test_removing_excluded_directories_refuses_a_symlinked_module(): void
+    {
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/strip-symlinked-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+        symlink($source, $baseDir.'/test-module');
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $pkg = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $pkg->setDistType('zip');
+
+        try {
+            $installer->callRemoveExcludedDirectories($pkg);
+            $this->fail('Expected the installer to refuse a symlinked module directory.');
+        } catch (ModuleInstallerException $e) {
+            $this->assertStringContainsString('test-module', $e->getMessage());
+        } finally {
+            $this->assertSourceUntouched($source);
+            (new Filesystem)->remove([$baseDir.'/test-module', $baseDir, $source]);
+        }
+    }
+
+    public function test_a_symlinked_path_repository_outside_the_app_is_refused(): void
+    {
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/outside-symlink-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $repo = $this->createStub(InstalledRepositoryInterface::class);
+
+        try {
+            $installer->install($repo, $this->pathPackage($source));
+            $this->fail('Expected a symlinked path repository outside the app to be refused.');
+        } catch (ModuleInstallerException $e) {
+            $this->assertStringContainsString('"symlink": false', $e->getMessage());
+            $this->assertStringContainsString('module-allow-symlink', $e->getMessage());
+        } finally {
+            $this->assertFalse($installer->parentInstallInvoked);
+            (new Filesystem)->remove([$baseDir, $source]);
+        }
+    }
+
+    public function test_a_copied_path_repository_outside_the_app_is_allowed(): void
+    {
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/outside-copy-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source, false));
+
+        $this->assertTrue($installer->parentInstallInvoked);
+
+        (new Filesystem)->remove([$baseDir, $source]);
+    }
+
+    public function test_the_symlink_check_can_be_switched_off(): void
+    {
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/outside-allowed-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+
+        $installer = $this->makeSafetyInstaller($baseDir, ['module-allow-symlink' => true]);
+        $installer->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source));
+
+        $this->assertTrue($installer->parentInstallInvoked);
+
+        (new Filesystem)->remove([$baseDir, $source]);
+    }
+
+    public function test_update_backs_up_the_module_first_and_keeps_the_last_three(): void
+    {
+        $baseDir = sys_get_temp_dir().'/update-backup-'.uniqid('', true);
+        mkdir($baseDir.'/test-module/.github', 0755, true);
+        file_put_contents($baseDir.'/test-module/composer.json', '{"edited": true}');
+        file_put_contents($baseDir.'/test-module/.github/ci.yml', 'on: push');
+
+        $backups = $baseDir.'/backups';
+        mkdir($backups.'/test-module', 0755, true);
+        foreach (['20200101-000000', '20200102-000000', '20200103-000000'] as $old) {
+            touch($backups."/test-module/{$old}-1.0.0.tar.gz");
+        }
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->backupRoot = $backups;
+
+        $initial = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $initial->setDistType('zip');
+        $target = new Package('saucebase/test-module', '2.0.0.0', '2.0.0');
+        $target->setDistType('zip');
+
+        $installer->update($this->createStub(InstalledRepositoryInterface::class), $initial, $target);
+
+        $archives = glob($backups.'/test-module/*.tar.gz');
+        sort($archives);
+        $this->assertCount(3, $archives);
+        $this->assertStringNotContainsString('20200101', implode(' ', $archives));
+
+        $newest = end($archives);
+        $listing = (new Process(['tar', '-tzf', $newest]))->mustRun()->getOutput();
+        $this->assertStringContainsString('test-module/composer.json', $listing);
+        $this->assertStringContainsString('test-module/.github/ci.yml', $listing);
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    public function test_backups_can_be_switched_off(): void
+    {
+        $baseDir = sys_get_temp_dir().'/update-no-backup-'.uniqid('', true);
+        mkdir($baseDir.'/test-module', 0755, true);
+        file_put_contents($baseDir.'/test-module/composer.json', '{}');
+
+        $installer = $this->makeSafetyInstaller($baseDir, ['module-backups' => 0]);
+        $installer->backupRoot = $baseDir.'/backups';
+
+        $initial = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $initial->setDistType('zip');
+        $target = new Package('saucebase/test-module', '2.0.0.0', '2.0.0');
+        $target->setDistType('zip');
+
+        $installer->update($this->createStub(InstalledRepositoryInterface::class), $initial, $target);
+
+        $this->assertDirectoryDoesNotExist($baseDir.'/backups');
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    public function test_a_copied_path_repository_is_made_the_apps_own_copy(): void
+    {
+        // symlink: false mirrors the whole folder, .git included; that copy is the app's.
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/install-copied-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->onParentInstall = fn () => (new Filesystem)->mirror($source, $baseDir.'/test-module');
+        $installer->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source, false));
+
+        $this->assertDirectoryDoesNotExist($baseDir.'/test-module/.git');
+        $this->assertFileExists($baseDir.'/test-module/resources/js/pages/Index.vue');
+        $this->assertDirectoryDoesNotExist($baseDir.'/test-module/resources/js/react');
+        $this->assertSourceUntouched($source);
+
+        (new Filesystem)->remove([$baseDir, $source]);
+    }
+
+    public function test_a_worktree_checkout_is_never_changed(): void
+    {
+        // Worktrees and submodules have a .git file pointing at the real git dir, not a folder.
+        $baseDir = sys_get_temp_dir().'/update-worktree-'.uniqid('', true);
+        mkdir($baseDir.'/test-module', 0755, true);
+        file_put_contents($baseDir.'/test-module/.git', 'gitdir: /elsewhere/.git/worktrees/test-module');
+        file_put_contents($baseDir.'/test-module/composer.json', '{"edited": true}');
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->backupRoot = $baseDir.'/backups';
+
+        $initial = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $initial->setDistType('zip');
+        $target = new Package('saucebase/test-module', '2.0.0.0', '2.0.0');
+        $target->setDistType('zip');
+
+        $installer->update($this->createStub(InstalledRepositoryInterface::class), $initial, $target);
+
+        $this->assertFileExists($baseDir.'/test-module/.git');
+        $this->assertStringContainsString('edited', (string) file_get_contents($baseDir.'/test-module/composer.json'));
+        $this->assertFalse($installer->downloadBaseInvoked);
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    public function test_a_branch_version_backs_up_as_one_file(): void
+    {
+        $baseDir = sys_get_temp_dir().'/backup-branch-'.uniqid('', true);
+        mkdir($baseDir.'/test-module', 0755, true);
+        file_put_contents($baseDir.'/test-module/composer.json', '{}');
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->backupRoot = $baseDir.'/backups';
+
+        $initial = new Package('saucebase/test-module', 'dev-feature/foo', 'dev-feature/foo');
+        $initial->setDistType('zip');
+        $target = new Package('saucebase/test-module', '2.0.0.0', '2.0.0');
+        $target->setDistType('zip');
+
+        $installer->update($this->createStub(InstalledRepositoryInterface::class), $initial, $target);
+
+        $archives = glob($baseDir.'/backups/test-module/*.tar.gz');
+        $this->assertCount(1, $archives);
+        $this->assertStringContainsString('dev-feature-foo', basename($archives[0]));
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    public function test_composer_mirror_path_repos_counts_as_a_copy(): void
+    {
+        $source = $this->makeSourceRepo();
+        $baseDir = sys_get_temp_dir().'/outside-env-mirror-'.uniqid('', true);
+        mkdir($baseDir, 0755, true);
+        putenv('COMPOSER_MIRROR_PATH_REPOS=1');
+
+        try {
+            $installer = $this->makeSafetyInstaller($baseDir);
+            $installer->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source));
+            $this->assertTrue($installer->parentInstallInvoked);
+
+            // An explicit symlink: true still wins over the environment, as in Composer.
+            $this->expectException(ModuleInstallerException::class);
+            $this->makeSafetyInstaller($baseDir)->install($this->createStub(InstalledRepositoryInterface::class), $this->pathPackage($source, true));
+        } finally {
+            putenv('COMPOSER_MIRROR_PATH_REPOS');
+            (new Filesystem)->remove([$baseDir, $source]);
+        }
     }
 }
