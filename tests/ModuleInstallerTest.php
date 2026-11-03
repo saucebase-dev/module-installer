@@ -1708,6 +1708,29 @@ final class ModuleInstallerTest extends TestCase
         $installer->uninstall($repo, $pkg);
     }
 
+    /** Two vendors' modules of one name install to one folder; removing one leaves it for the other. */
+    public function test_uninstall_keeps_a_folder_another_package_still_uses(): void
+    {
+        $io = $this->createMock(IOInterface::class);
+        $io->expects($this->once())
+            ->method('write')
+            ->with($this->stringContains('vendor-b/billing'));
+
+        $pkg = new Package('vendor-a/billing', '1.0.0.0', '1.0.0');
+        $pkg->setType('saucebase-module');
+        $other = new Package('vendor-b/billing', '1.0.0.0', '1.0.0');
+        $other->setType('saucebase-module');
+
+        $repo = $this->createMock(InstalledRepositoryInterface::class);
+        $repo->method('hasPackage')->willReturn(true);
+        $repo->method('getPackages')->willReturn([$pkg, $other]);
+        $repo->expects($this->once())->method('removePackage')->with($pkg);
+
+        $installer = $this->installerWithExtra([], $io);
+        $installer->forcePathRepository = false;
+        $installer->uninstall($repo, $pkg);
+    }
+
     /** The folder is backed up before it goes, so removing it is the default. */
     public function test_should_delete_on_remove_by_default(): void
     {
@@ -1750,14 +1773,14 @@ final class ModuleInstallerTest extends TestCase
     }
 
     /** @param  array<string, mixed>  $extra */
-    private function installerWithExtra(array $extra): TestableInstaller
+    private function installerWithExtra(array $extra, ?IOInterface $io = null): TestableInstaller
     {
         $composer = $this->createStub(Composer::class);
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
         $root->setExtra($extra);
         $composer->method('getPackage')->willReturn($root);
 
-        return new TestableInstaller(null, $composer);
+        return new TestableInstaller($io, $composer);
     }
 
     public function test_should_delete_on_remove_returns_true_when_flag_enabled(): void

@@ -147,7 +147,7 @@ The installer performs a clean install into the now-empty path.
 
 ## Removing a Module
 
-`composer remove` backs the module folder up to `storage/app/module-backups/` (see `module-backups`), then deletes it. A folder the installer doesn't own is never deleted: a symlink or a git checkout (`.git` folder or file) is refused, and a path repository's folder is left alone.
+`composer remove` backs the module folder up to `storage/app/module-backups/` (see `module-backups`), then deletes it. A folder the installer doesn't own is never deleted: a symlink or a git checkout (`.git` folder or file) is refused, so a path repository's symlink or git folder stays. A path repository copied without its `.git` is backed up and deleted like any other. A folder another installed module still uses stays too.
 
 With `module-backups: 0` there is no backup, so the folder stays unless `module-delete-on-remove` is `true`. To always keep it:
 
