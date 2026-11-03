@@ -1762,7 +1762,9 @@ final class ModuleInstallerTest extends TestCase
         $pkg->setDistType('zip');
 
         try {
-            $installer->uninstall($this->createStub(InstalledRepositoryInterface::class), $pkg);
+            $repo = $this->createStub(InstalledRepositoryInterface::class);
+            $repo->method('getPackages')->willReturn([]);
+            $installer->uninstall($repo, $pkg);
             $this->fail('A git checkout was not refused.');
         } catch (ModuleInstallerException) {
             $this->assertDirectoryExists($baseDir.'/test-module/.git');
@@ -1805,7 +1807,6 @@ final class ModuleInstallerTest extends TestCase
         $pkg->method('getPrettyName')->willReturn('saucebase/test-module');
 
         $repo = $this->createMock(InstalledRepositoryInterface::class);
-        $repo->method('getPackages')->willReturn([]);
         $repo->method('hasPackage')->willReturn(true);
         $repo->expects($this->once())->method('removePackage')->with($pkg);
 
