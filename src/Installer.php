@@ -854,7 +854,9 @@ class Installer extends LibraryInstaller
 
         $extra = $this->composer->getPackage()->getExtra();
 
-        return (bool) ($extra['module-delete-on-remove'] ?? false);
+        // The folder is backed up before it goes, so deleting is safe by default; with
+        // backups off it stays unless the app asks for deletion.
+        return (bool) ($extra['module-delete-on-remove'] ?? (int) ($extra['module-backups'] ?? self::DEFAULT_BACKUPS) > 0);
     }
 
     /**
@@ -878,7 +880,7 @@ class Installer extends LibraryInstaller
 
         if (! $this->shouldDeleteOnRemove()) {
             $installPath = $this->getInstallPath($package);
-            $this->io->write("  - <info>Skipping deletion of module directory (set module-delete-on-remove: true to enable):</info> {$installPath}");
+            $this->io->write("  - <info>Keeping the module directory (module-delete-on-remove is off); delete it to finish removing the module:</info> {$installPath}");
 
             if ($repo->hasPackage($package)) {
                 $repo->removePackage($package);

@@ -1694,7 +1694,7 @@ final class ModuleInstallerTest extends TestCase
         $io = $this->createMock(IOInterface::class);
         $io->expects($this->once())
             ->method('write')
-            ->with($this->stringContains('Skipping deletion of module directory'));
+            ->with($this->stringContains('Keeping the module directory'));
 
         $pkg = $this->createStub(PackageInterface::class);
         $pkg->method('getPrettyName')->willReturn('saucebase/test-module');
@@ -1708,14 +1708,56 @@ final class ModuleInstallerTest extends TestCase
         $installer->uninstall($repo, $pkg);
     }
 
-    public function test_should_delete_on_remove_returns_false_when_flag_absent(): void
+    /** The folder is backed up before it goes, so removing it is the default. */
+    public function test_should_delete_on_remove_by_default(): void
+    {
+        $this->assertTrue($this->installerWithExtra([])->callShouldDeleteOnRemove());
+    }
+
+    /** No backup, no deletion: with backups off the folder stays unless asked for. */
+    public function test_should_keep_the_folder_when_backups_are_off(): void
+    {
+        $this->assertFalse($this->installerWithExtra(['module-backups' => 0])->callShouldDeleteOnRemove());
+        $this->assertTrue($this->installerWithExtra(['module-backups' => 0, 'module-delete-on-remove' => true])->callShouldDeleteOnRemove());
+    }
+
+    public function test_should_keep_the_folder_when_told_to(): void
+    {
+        $this->assertFalse($this->installerWithExtra(['module-delete-on-remove' => false])->callShouldDeleteOnRemove());
+    }
+
+    /** A module someone turned into a git checkout is refused, not deleted. */
+    public function test_uninstall_refuses_a_git_checkout(): void
+    {
+        $baseDir = sys_get_temp_dir().'/uninstall-git-'.uniqid('', true);
+        mkdir($baseDir.'/test-module/.git', 0755, true);
+        file_put_contents($baseDir.'/test-module/composer.json', '{}');
+
+        $installer = $this->makeSafetyInstaller($baseDir);
+        $installer->backupRoot = $baseDir.'/backups';
+        $pkg = new Package('saucebase/test-module', '1.0.0.0', '1.0.0');
+        $pkg->setDistType('zip');
+
+        try {
+            $installer->uninstall($this->createStub(InstalledRepositoryInterface::class), $pkg);
+            $this->fail('A git checkout was not refused.');
+        } catch (ModuleInstallerException) {
+            $this->assertDirectoryExists($baseDir.'/test-module/.git');
+            $this->assertDirectoryDoesNotExist($baseDir.'/backups');
+        }
+
+        (new Filesystem)->remove($baseDir);
+    }
+
+    /** @param  array<string, mixed>  $extra */
+    private function installerWithExtra(array $extra): TestableInstaller
     {
         $composer = $this->createStub(Composer::class);
         $root = new RootPackage('root/app', '1.0.0.0', '1.0.0');
+        $root->setExtra($extra);
         $composer->method('getPackage')->willReturn($root);
 
-        $installer = new TestableInstaller(null, $composer);
-        $this->assertFalse($installer->callShouldDeleteOnRemove());
+        return new TestableInstaller(null, $composer);
     }
 
     public function test_should_delete_on_remove_returns_true_when_flag_enabled(): void
