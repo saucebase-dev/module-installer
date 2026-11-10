@@ -44,7 +44,9 @@ All options live in the `extra` section of the **root** `composer.json`. Every k
 | `module-dir` | `modules` | Directory modules are installed into. |
 | `module-exclude-dirs` | `[".github", ".git"]` | Directories removed from each module after install/update. |
 | `module-update-strategy` | `merge` | `merge` preserves local edits; `overwrite` replaces entirely. |
-| `module-delete-on-remove` | `false` | Set to `true` to delete the module folder on `composer remove`. |
+| `module-delete-on-remove` | `true` while backups are on | Deletes the module folder on `composer remove`, after backing it up. `false` keeps it. |
+| `module-backups` | `3` | Backups kept per module before an update or removal changes its folder. `0` turns them off. |
+| `module-allow-symlink` | `false` | Set to `true` to allow a symlinked path repository outside the app. |
 
 Example (the Saucebase app configuration):
 
@@ -143,25 +145,59 @@ composer update vendor/example-module
 
 The installer performs a clean install into the now-empty path.
 
-## Skipping Module Deletion on Remove
+## Removing a Module
 
-By default, running `composer remove` on a module **does not delete the module directory**. The package is removed from `composer.lock` and Composer's tracking, but the folder stays on disk for manual review.
+`composer remove` backs the module folder up to `storage/app/module-backups/` (see `module-backups`), then deletes it. A folder the installer doesn't own is never deleted: a symlink or a git checkout (`.git` folder or file) is refused, so a path repository's symlink or git folder stays. A path repository copied without its `.git` is backed up and deleted like any other. A folder another installed module still uses stays too.
 
-```
-- Skipping deletion of module directory (set module-delete-on-remove: true to enable): modules/example-module
-```
-
-To restore the old behaviour and delete the folder automatically:
+With `module-backups: 0` there is no backup, so the folder stays unless `module-delete-on-remove` is `true`. To always keep it:
 
 ```json
 {
     "extra": {
-        "module-delete-on-remove": true
+        "module-delete-on-remove": false
     }
 }
 ```
 
-> **Why skip by default?** A `composer remove` followed by `composer install` in CI will not re-download an untracked folder — but it also will not delete your work. The conservative default prevents accidental data loss; opt in to deletion explicitly.
+```
+- Keeping the module directory (module-delete-on-remove is off); delete it to finish removing the module: modules/example-module
+```
+
+Delete the folder yourself then: an app with Saucebase core refuses to boot with a module folder Composer doesn't autoload.
+
+## Safety
+
+The installer only ever changes its own copy of a module in `modules/`. Before it deletes or
+rewrites anything there, it checks the folder is a real directory inside `modules/`, not a
+symlink and not a git checkout, and stops with an error otherwise.
+
+### Backups
+
+Before an update or a removal changes a module's folder, the installer archives it, hidden files
+included, to `storage/app/module-backups/<module>/<date>-<version>.tar.gz`. Laravel's
+`storage/app/.gitignore` already keeps them out of git. The newest three are kept per module; set
+`module-backups` to change that, or `0` to turn them off. To restore one:
+
+```bash
+tar -xzf storage/app/module-backups/billing/20261101-120000-v2.1.0.tar.gz -C modules
+```
+
+### Path repositories outside the app
+
+A `path` repository is symlinked by default, so a module from a folder outside the app would be
+changed in that folder (its `.git`, `.github` and unused framework files removed). The installer
+refuses it and prints the fix. Copy the module instead:
+
+```json
+{
+    "repositories": [
+        { "type": "path", "url": "../my-modules/*", "options": { "symlink": false } }
+    ]
+}
+```
+
+To keep the link anyway, set `"module-allow-symlink": true`. The installer then leaves the
+linked module as it is.
 
 ## Frontend Framework Support
 
@@ -221,7 +257,7 @@ composer install
 Useful scripts:
 
 - `composer test` — run the PHPUnit 12 suite (`tests/`).
-- `./vendor/bin/pint` — apply Laravel Pint formatting (add `--test` for CI-style checks).
+- `composer lint` — apply Laravel Pint formatting; `composer lint:test` checks it, as CI does.
 - `composer validate` — verify Composer metadata.
 
 ## License

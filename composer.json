@@ -16,8 +16,9 @@
     "symfony/process": "^7.0|^8.0"
   },
   "require-dev": {
-    "composer/composer": "^2.0",
-    "phpunit/phpunit": "^12.3"
+    "composer/composer": "^2.11.1",
+    "phpunit/phpunit": "^12.5.42",
+    "laravel/pint": "^1.32.1"
   },
   "autoload": {
     "psr-4": {
@@ -29,7 +30,9 @@
     "class": "Saucebase\\ModuleInstaller\\Plugin"
   },
   "scripts": {
-    "test": "phpunit"
+    "test": "phpunit",
+    "lint": "pint",
+    "lint:test": "pint --test"
   },
   "minimum-stability": "stable",
   "prefer-stable": true
