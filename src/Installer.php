@@ -22,8 +22,8 @@ class Installer extends LibraryInstaller
 {
     const DEFAULT_ROOT = 'modules';
 
-    /** Saucebase's own modules, and the ones an application writes. */
-    const DEFAULT_MODULE_TYPES = ['saucebase-module', 'laravel-module'];
+    /** Saucebase's own modules, app starting points built from them, and the modules an application writes. */
+    const DEFAULT_MODULE_TYPES = ['saucebase-module', 'saucebase-template', 'laravel-module'];
 
     const DEFAULT_EXCLUDED_DIRS = ['.github', '.git'];
 
