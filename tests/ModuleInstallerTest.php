@@ -206,6 +206,7 @@ final class ModuleInstallerTest extends TestCase
         // Saucebase's own modules and the ones an application writes, so neither needs setup.
         $this->assertTrue($installer->supports('saucebase-module'));
         $this->assertTrue($installer->supports('laravel-module'));
+        $this->assertTrue($installer->supports('saucebase-template'));
         $this->assertFalse($installer->supports('library'));
         $this->assertFalse($installer->supports('composer-plugin'));
     }

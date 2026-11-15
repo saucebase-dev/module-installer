@@ -27,7 +27,10 @@
     }
   },
   "extra": {
-    "class": "Saucebase\\ModuleInstaller\\Plugin"
+    "class": "Saucebase\\ModuleInstaller\\Plugin",
+    "branch-alias": {
+      "dev-dev": "3.3.x-dev"
+    }
   },
   "scripts": {
     "test": "phpunit",
